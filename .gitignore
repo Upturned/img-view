@@ -1,7 +1,7 @@
 .claude/
 node_modules/
 thumbnails/
-images/
+#images/
 videos/
 thumbnail/
-data/
+#data/
