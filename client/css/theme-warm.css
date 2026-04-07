@@ -1,0 +1,57 @@
+/* ============================================================
+   THEME: WARM — Cream backgrounds, dark brown text, amber accent.
+   Soft on the eyes, good contrast, no harsh whites or blacks.
+   ============================================================ */
+
+:root {
+  /* Fonts */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Backgrounds — creamy, not pure white */
+  --bg-primary:   #faf7f2;
+  --bg-secondary: #f2ede5;
+  --bg-tertiary:  #e8e0d4;
+  --bg-nav:       rgba(250, 247, 242, 0.94);
+
+  /* Text — warm dark brown, not pure black */
+  --text-primary:   #2c2018;
+  --text-secondary: #6b5848;
+  --text-muted:     #a89080;
+
+  /* Accent — burnt amber */
+  --accent:       #c26a20;
+  --accent-hover: #d97b2e;
+  --btn-text:     #ffffff;
+
+  /* Borders */
+  --border:       #d4c4b0;
+  --border-hover: #b8a090;
+
+  /* Shadows — soft and warm */
+  --shadow:       0 2px 8px rgba(80, 40, 10, 0.08);
+  --shadow-hover: 0 6px 20px rgba(80, 40, 10, 0.14);
+
+  /* Border radii — gently rounded */
+  --radius-card:  8px;
+  --radius-btn:   6px;
+  --radius-input: 6px;
+
+  /* Tags */
+  --tag-bg:       #ede4d8;
+  --tag-text:     #6b5848;
+  --tag-border:   #d4c4b0;
+  --tag-bg-hover: #e0d4c4;
+
+  /* Grid */
+  --grid-gap: 10px;
+}
+
+/* Subtle shadow on cards */
+.card {
+  box-shadow: var(--shadow);
+}
+
+/* Slightly warmer navbar separation */
+.navbar {
+  box-shadow: 0 1px 0 var(--border), 0 2px 12px rgba(80, 40, 10, 0.06);
+}

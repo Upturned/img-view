@@ -1,0 +1,64 @@
+/* ============================================================
+   THEME: HIGH CONTRAST — Black background, white text, yellow accent.
+   Maximum legibility, no decorative shadows, sharp edges.
+   ============================================================ */
+
+:root {
+  /* Fonts */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Backgrounds */
+  --bg-primary:   #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary:  #141414;
+  --bg-nav:       rgba(0, 0, 0, 0.98);
+
+  /* Text */
+  --text-primary:   #ffffff;
+  --text-secondary: #cccccc;
+  --text-muted:     #888888;
+
+  /* Accent — high-vis yellow */
+  --accent:       #ffd700;
+  --accent-hover: #ffe84d;
+  --btn-text:     #000000;
+
+  /* Borders — prominent, always visible */
+  --border:       #ffffff;
+  --border-hover: #ffd700;
+
+  /* Shadows — none, borders do the work */
+  --shadow:       none;
+  --shadow-hover: none;
+
+  /* Border radii — sharp */
+  --radius-card:  2px;
+  --radius-btn:   2px;
+  --radius-input: 2px;
+
+  /* Tags */
+  --tag-bg:       #000000;
+  --tag-text:     #ffffff;
+  --tag-border:   #ffffff;
+  --tag-bg-hover: #1a1a1a;
+
+  /* Grid */
+  --grid-gap: 8px;
+}
+
+/* Stronger borders everywhere for maximum clarity */
+.card {
+  border-width: 2px;
+}
+
+.navbar {
+  border-bottom-width: 2px;
+}
+
+.btn-ghost {
+  border-width: 2px;
+}
+
+.tag {
+  border-width: 2px;
+}
