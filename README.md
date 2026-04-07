@@ -1,6 +1,6 @@
 # img-view
 
-A local image and video visualizer. Drop your files into folders, point a browser at `localhost:3000`, and browse them.
+A local image and video visualizer. Drop your files into folders, point a browser at `localhost:2080`, and browse them.
 
 ---
 
@@ -20,7 +20,7 @@ npm install
 npm start
 ```
 
-Then open **http://localhost:3000** in your browser.
+Then open **http://localhost:2080** in your browser.
 
 For development with auto-restart on file changes:
 
