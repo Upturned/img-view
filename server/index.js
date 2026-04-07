@@ -3,7 +3,7 @@ const path = require('path');
 const { generateAllThumbs, getThumbnailsDir } = require('./utils/thumbnails');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 2080;
 
 // --- Middleware ---
 app.use(express.json());

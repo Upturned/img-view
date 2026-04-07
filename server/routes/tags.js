@@ -42,6 +42,37 @@ router.get('/all', (req, res) => {
   res.json(result);
 });
 
+// POST /api/tags/batch-add
+// Adds a single tag to multiple images (non-destructive: existing tags are kept)
+// Body: { images: [{category, filename}], tag: string }
+router.post('/batch-add', (req, res) => {
+  const { images, tag } = req.body;
+
+  if (!Array.isArray(images) || images.length === 0) {
+    return res.status(400).json({ error: '"images" must be a non-empty array.' });
+  }
+  if (!tag || typeof tag !== 'string' || !tag.trim()) {
+    return res.status(400).json({ error: '"tag" is required.' });
+  }
+
+  const normalized = tag.trim().toLowerCase();
+  const data = loadTags();
+  let added = 0;
+
+  for (const { category, filename } of images) {
+    if (!category || !filename) continue;
+    const key = `${category}/${filename}`;
+    const existing = data[key] || [];
+    if (!existing.includes(normalized)) {
+      data[key] = [...existing, normalized];
+      added++;
+    }
+  }
+
+  saveTags(data);
+  res.json({ message: `Added tag "${normalized}" to ${added} image(s).`, added });
+});
+
 // GET /api/tags/:category/:filename
 // Returns tags for a specific image
 router.get('/:category/:filename', (req, res) => {
