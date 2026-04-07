@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>img-view</title>
+
+  <!-- Theme injected before any CSS to avoid flash -->
+  <script>
+    const _t = localStorage.getItem('theme') || 'modern';
+    document.write('<link id="theme-link" rel="stylesheet" href="/css/theme-' + _t + '.css">');
+  </script>
+  <link rel="stylesheet" href="/css/base.css" />
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <span class="navbar-logo">img<span>·</span>view</span>
+
+      <div class="navbar-search">
+        <div class="search-bar">
+          <input type="text" id="search-input" placeholder="Search categories or images… use #tag" autocomplete="off" />
+          <button id="search-clear" class="hidden" title="Clear search">✕</button>
+        </div>
+      </div>
+
+      <div class="navbar-actions">
+        <button class="btn btn-ghost" id="btn-nav-images">Images</button>
+        <button class="btn btn-ghost" id="btn-nav-videos">Videos</button>
+        <button class="btn btn-ghost" id="btn-nav-organize">Organize</button>
+        <button class="btn btn-ghost" id="btn-favorites">Favorites</button>
+        <button class="btn btn-primary" id="btn-random-global" title="Open a random image">Random</button>
+        <button class="btn-icon theme-toggle" id="theme-toggle-btn" title="Switch theme"></button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Loose files banner (hidden until checked) -->
+  <div id="loose-banner" class="hidden">
+    <div class="container">
+      <div class="loose-banner-inner">
+        <span id="loose-banner-text"></span>
+        <div class="flex gap-2">
+          <button class="btn btn-primary btn-sm" id="btn-organize">Organize now</button>
+          <button class="btn btn-ghost btn-sm" id="btn-dismiss-banner">Dismiss</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <main class="container page">
+    <div class="page-layout">
+
+      <div class="page-content">
+
+        <!-- Default view: categories -->
+        <section id="section-categories">
+          <div class="section-header">
+            <h2 id="categories-title">Categories</h2>
+            <button class="btn btn-ghost btn-sm" id="btn-new-category">+ New category</button>
+          </div>
+          <div id="categories-grid" class="image-grid" style="--grid-cols: 5;"></div>
+          <div id="categories-empty" class="empty-state hidden">
+            <div class="icon">🗂</div>
+            <p>No categories yet. Drop image folders into <code>/images</code> or create one.</p>
+          </div>
+        </section>
+
+        <!-- Search / tag-filter results (shown when query or tags are active) -->
+        <section id="section-search" class="hidden">
+          <div id="search-categories-block">
+            <h3 class="search-section-title">Categories</h3>
+            <div id="search-categories-grid" class="image-grid" style="--grid-cols: 5;"></div>
+            <p id="search-categories-empty" class="hidden" style="color:var(--text-muted);font-size:.85rem;padding:.5rem 0;">No matching categories.</p>
+          </div>
+          <div id="search-images-block" class="mt-4">
+            <h3 class="search-section-title">Images</h3>
+            <div id="search-images-grid" class="image-grid" style="--grid-cols: 5;"></div>
+            <p id="search-images-empty" class="hidden" style="color:var(--text-muted);font-size:.85rem;padding:.5rem 0;">No matching images.</p>
+          </div>
+        </section>
+
+        <!-- Favorites view -->
+        <section id="section-favorites" class="hidden">
+          <div class="section-header">
+            <h2>Favorites</h2>
+          </div>
+          <div id="favorites-grid" class="image-grid" style="--grid-cols: 5;"></div>
+          <div id="favorites-empty" class="empty-state hidden">
+            <div class="icon">★</div>
+            <p>No favorites yet. Star an image while viewing it to add it here.</p>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Tag sidebar -->
+      <aside class="tag-sidebar">
+        <div class="tag-sidebar-header">
+          <span class="tag-sidebar-title">Tags</span>
+          <button class="tag-sidebar-clear hidden" id="btn-clear-tags">Clear</button>
+        </div>
+        <input type="text" class="tag-sidebar-search" id="tag-sidebar-search" placeholder="Search tags…" autocomplete="off" />
+        <div class="tag-sidebar-sort-row">
+          <button class="tag-sidebar-sort-btn active" id="tag-sort-name" data-sort="name">Name</button>
+          <button class="tag-sidebar-sort-btn" id="tag-sort-count" data-sort="count">Count</button>
+        </div>
+        <div id="tag-sidebar-list" class="tag-sidebar-list">
+          <span class="tag-sidebar-empty">Loading…</span>
+        </div>
+      </aside>
+
+    </div>
+  </main>
+
+  <!-- New Category modal -->
+  <div id="modal-new-category" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">New Category</div>
+      <input class="input" id="input-category-name" type="text" placeholder="Category name…" maxlength="80" />
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="btn-cancel-category">Cancel</button>
+        <button class="btn btn-primary" id="btn-confirm-category">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recycle bin modal -->
+  <div id="modal-recycle-bin" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-title">🗑 Recycle Bin</div>
+      <div id="recycle-bin-list" class="recycle-bin-list">
+        <div class="spinner"></div>
+      </div>
+      <div id="recycle-bin-empty" class="hidden" style="color:var(--text-muted);font-size:.875rem;padding:1rem 0;text-align:center;">
+        Recycle bin is empty.
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="btn-recycle-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/theme.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/context-menu.js"></script>
+  <script src="/js/home.js"></script>
+  <script src="/js/navbar.js"></script>
+
+  <style>
+    .search-section-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    #loose-banner {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .loose-banner-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.6rem 2rem;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    /* Image card in search results shows category name */
+    .card-category-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    .modal-wide {
+      max-width: 640px;
+    }
+
+    .recycle-bin-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 400px;
+      overflow-y: auto;
+      margin: 0.5rem 0;
+    }
+
+    .recycle-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.4rem 0.5rem;
+      border-radius: var(--radius-card);
+      background: var(--bg-tertiary);
+    }
+
+    .recycle-item-thumb {
+      width: 48px;
+      height: 48px;
+      object-fit: cover;
+      border-radius: 4px;
+      flex-shrink: 0;
+      background: var(--bg-secondary);
+    }
+
+    .recycle-item-name {
+      flex: 1;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+
+    .recycle-item-actions {
+      display: flex;
+      gap: 0.4rem;
+      flex-shrink: 0;
+    }
+  </style>
+</body>
+</html>

@@ -1,0 +1,71 @@
+/* ============================================================
+   THEME: MODERN — Dark, rich, layered.
+   Soft glows, rounded corners, vibrant accent, visual depth.
+   ============================================================ */
+
+:root {
+  /* Fonts */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Backgrounds */
+  --bg-primary:   #12111a;
+  --bg-secondary: #1c1b27;
+  --bg-tertiary:  #26253a;
+  --bg-nav:       rgba(18, 17, 26, 0.88);
+
+  /* Text */
+  --text-primary:   #f0eeff;
+  --text-secondary: #9b97c0;
+  --text-muted:     #524f6e;
+
+  /* Accent — electric violet */
+  --accent:       #8b5cf6;
+  --accent-hover: #a78bfa;
+  --btn-text:     #ffffff;
+
+  /* Borders */
+  --border:       #2e2c44;
+  --border-hover: #5b54a0;
+
+  /* Shadows */
+  --shadow:       0 2px 12px rgba(0,0,0,0.4);
+  --shadow-hover: 0 8px 32px rgba(139, 92, 246, 0.2), 0 4px 16px rgba(0,0,0,0.5);
+
+  /* Border radii — soft and rounded */
+  --radius-card:  14px;
+  --radius-btn:   8px;
+  --radius-input: 8px;
+
+  /* Tags */
+  --tag-bg:       rgba(139, 92, 246, 0.12);
+  --tag-text:     #a78bfa;
+  --tag-border:   rgba(139, 92, 246, 0.25);
+  --tag-bg-hover: rgba(139, 92, 246, 0.22);
+
+  /* Grid */
+  --grid-gap: 14px;
+}
+
+/* Extra depth on cards for the modern theme */
+.card {
+  box-shadow: var(--shadow);
+}
+
+/* Subtle gradient overlay on card covers */
+.card-cover-wrapper {
+  position: relative;
+}
+
+/* Glowing active/focus states */
+.btn-primary {
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.3);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 24px rgba(167, 139, 250, 0.4);
+}
+
+/* Navbar gets a subtle bottom glow */
+.navbar {
+  box-shadow: 0 1px 0 var(--border), 0 4px 24px rgba(0,0,0,0.3);
+}

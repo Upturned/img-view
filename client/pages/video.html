@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video — img-view</title>
+
+  <script>
+    const _t = localStorage.getItem('theme') || 'modern';
+    document.write('<link id="theme-link" rel="stylesheet" href="/css/theme-' + _t + '.css">');
+  </script>
+  <link rel="stylesheet" href="/css/base.css" />
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+
+    #player-layout {
+      display: flex;
+      height: 100vh;
+      flex-direction: column;
+    }
+
+    /* ── Top bar ── */
+    #top-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      height: 52px;
+      padding: 0 1rem;
+      background: var(--bg-nav);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      z-index: 10;
+    }
+
+    #video-info { flex: 1; min-width: 0; }
+
+    #video-filename {
+      font-size: 0.9rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+
+    #video-meta { font-size: 0.72rem; color: var(--text-muted); }
+
+    #top-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      flex-shrink: 0;
+    }
+
+    #video-counter {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .top-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+
+    /* ── Main area ── */
+    #main-area {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    /* ── Video panel ── */
+    #video-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #000;
+      position: relative;
+      min-width: 0;
+    }
+
+    #main-video {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* ── Nav arrows ── */
+    .nav-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 5;
+      width: 44px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.4);
+      border-radius: var(--radius-btn);
+      color: rgba(255,255,255,0.7);
+      font-size: 1.4rem;
+      border: none;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+    }
+
+    #video-panel:hover .nav-arrow { opacity: 1; }
+    .nav-arrow:hover { background: rgba(0,0,0,0.7); color: #fff; }
+    .nav-arrow:disabled { opacity: 0 !important; cursor: default; }
+
+    #btn-prev { left: 0.75rem; }
+    #btn-next { right: 0.75rem; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    #sidebar-header {
+      padding: 0.75rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.55rem 1rem;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+
+    .sidebar-item:hover { background: var(--bg-tertiary); }
+
+    .sidebar-item.active {
+      background: var(--bg-tertiary);
+      border-left: 3px solid var(--accent);
+    }
+
+    .sidebar-thumb {
+      width: 64px;
+      height: 40px;
+      object-fit: cover;
+      background: var(--bg-primary);
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-thumb-placeholder {
+      width: 64px;
+      height: 40px;
+      background: var(--bg-primary);
+      border-radius: 3px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      color: var(--text-muted);
+    }
+
+    .sidebar-name {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar-item.active .sidebar-name { color: var(--text-primary); font-weight: 500; }
+
+    /* ── Sidebar toggle ── */
+    #btn-sidebar-toggle {
+      font-size: 0.8rem;
+    }
+
+    #sidebar.collapsed { display: none; }
+  </style>
+</head>
+<body>
+
+<div id="player-layout">
+
+  <!-- Top bar -->
+  <div id="top-bar">
+    <button class="btn btn-ghost btn-sm" id="btn-back">← Back</button>
+    <div class="top-sep"></div>
+    <div id="video-info">
+      <div id="video-filename">—</div>
+      <div id="video-meta">—</div>
+    </div>
+    <span id="video-counter"></span>
+    <div class="top-sep"></div>
+    <div id="top-actions">
+      <button class="btn btn-ghost btn-sm" id="btn-nav-images">Images</button>
+      <button class="btn btn-ghost btn-sm" id="btn-nav-videos">Videos</button>
+      <button class="btn btn-ghost btn-sm" id="btn-nav-organize">Organize</button>
+      <button class="btn btn-ghost btn-sm" id="btn-random-video">Random</button>
+      <button class="btn btn-ghost btn-sm" id="btn-open-with">Open with…</button>
+      <button class="btn btn-ghost btn-sm" id="btn-tags-toggle">Tags</button>
+      <button class="btn btn-ghost btn-sm" id="btn-sidebar-toggle">☰ List</button>
+      <button class="btn-icon" id="btn-fullscreen" title="Fullscreen (F)">⛶</button>
+      <button class="btn-icon theme-toggle" id="theme-toggle-btn" title="Switch theme"></button>
+    </div>
+  </div>
+
+  <!-- Tags panel -->
+  <div id="tags-panel" style="flex-shrink:0;background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:0.6rem 1rem;display:none;">
+    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+      <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">Tags:</span>
+      <div class="tags" id="tags-display"></div>
+      <div class="tag-input-wrapper"><input type="text" id="tag-input" placeholder="Add tag…" autocomplete="off" /></div>
+    </div>
+  </div>
+
+  <!-- Main area -->
+  <div id="main-area">
+
+    <!-- Video panel -->
+    <div id="video-panel">
+      <video id="main-video" controls autoplay>
+        Your browser does not support the video element.
+      </video>
+
+      <button class="nav-arrow" id="btn-prev" title="Previous (←)">‹</button>
+      <button class="nav-arrow" id="btn-next" title="Next (→)">›</button>
+    </div>
+
+    <!-- Sidebar: video list -->
+    <div id="sidebar">
+      <div id="sidebar-header">In this category</div>
+      <div id="sidebar-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/context-menu.js"></script>
+<script src="/js/video.js"></script>
+<script src="/js/navbar.js"></script>
+
+</body>
+</html>

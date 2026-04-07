@@ -1,0 +1,47 @@
+/* ============================================================
+   THEME: MINIMAL — Dark, clean, restrained.
+   High contrast, minimal decoration, tight spacing.
+   ============================================================ */
+
+:root {
+  /* Fonts */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Backgrounds */
+  --bg-primary:   #0e0e0e;
+  --bg-secondary: #161616;
+  --bg-tertiary:  #1f1f1f;
+  --bg-nav:       rgba(14, 14, 14, 0.92);
+
+  /* Text */
+  --text-primary:   #e8e8e8;
+  --text-secondary: #999999;
+  --text-muted:     #555555;
+
+  /* Accent — muted steel blue */
+  --accent:       #5b8dee;
+  --accent-hover: #7aa3f5;
+  --btn-text:     #ffffff;
+
+  /* Borders */
+  --border:       #2a2a2a;
+  --border-hover: #3d3d3d;
+
+  /* Shadows */
+  --shadow:       none;
+  --shadow-hover: 0 4px 20px rgba(0,0,0,0.5);
+
+  /* Border radii — keep it sharp */
+  --radius-card:  4px;
+  --radius-btn:   4px;
+  --radius-input: 4px;
+
+  /* Tags */
+  --tag-bg:       #1f1f1f;
+  --tag-text:     #aaaaaa;
+  --tag-border:   #2a2a2a;
+  --tag-bg-hover: #2a2a2a;
+
+  /* Grid */
+  --grid-gap: 8px;
+}

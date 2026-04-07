@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image — img-view</title>
+
+  <script>
+    const _t = localStorage.getItem('theme') || 'modern';
+    document.write('<link id="theme-link" rel="stylesheet" href="/css/theme-' + _t + '.css">');
+  </script>
+  <link rel="stylesheet" href="/css/base.css" />
+  <style>
+    /* ── Layout ── */
+    html, body { height: 100%; overflow: hidden; }
+
+    #viewer {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Top bar ── */
+    #top-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      height: 52px;
+      padding: 0 1rem;
+      background: var(--bg-nav);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      z-index: 10;
+    }
+
+    #img-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    #img-filename {
+      font-size: 0.9rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+
+    #img-meta {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    #top-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      flex-shrink: 0;
+    }
+
+    /* ── Image area ── */
+    #image-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-primary);
+    }
+
+    #image-container {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      cursor: default;
+    }
+
+    #image-container.dragging { cursor: grabbing; }
+    #image-container.zoomable { cursor: zoom-in; }
+    #image-container.panning  { cursor: grab; }
+
+    #main-image {
+      position: absolute;
+      max-width: none;
+      max-height: none;
+      transform-origin: center center;
+      transition: transform 0.12s ease, opacity 0.2s;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    #main-image.loading { opacity: 0; }
+
+    /* ── Nav arrows ── */
+    .nav-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 5;
+      width: 44px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.35);
+      border-radius: var(--radius-btn);
+      color: rgba(255,255,255,0.7);
+      font-size: 1.4rem;
+      transition: background 0.15s, color 0.15s, opacity 0.15s;
+      border: none;
+      cursor: pointer;
+      opacity: 0;
+    }
+
+    #image-area:hover .nav-arrow { opacity: 1; }
+    .nav-arrow:hover { background: rgba(0,0,0,0.65); color: #fff; }
+    .nav-arrow:disabled { opacity: 0 !important; cursor: default; }
+
+    #btn-prev { left: 0.75rem; }
+    #btn-next { right: 0.75rem; }
+
+    /* ── Zoom controls ── */
+    #zoom-controls {
+      position: absolute;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(0,0,0,0.5);
+      border-radius: 99px;
+      padding: 0.3rem 0.7rem;
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 5;
+    }
+
+    #image-area:hover #zoom-controls { opacity: 1; }
+
+    .zoom-btn {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: transparent;
+      color: rgba(255,255,255,0.8);
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .zoom-btn:hover { background: rgba(255,255,255,0.15); }
+
+    #zoom-label {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.7);
+      min-width: 42px;
+      text-align: center;
+    }
+
+    /* ── Action controls (star / trash) ── */
+    #action-controls {
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(0,0,0,0.5);
+      border-radius: 99px;
+      padding: 0.3rem 0.7rem;
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 5;
+    }
+
+    #image-area:hover #action-controls { opacity: 1; }
+
+    .action-btn {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: transparent;
+      color: rgba(255,255,255,0.7);
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .action-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    .action-btn:disabled { opacity: 0.3; cursor: default; }
+    .action-btn:disabled:hover { background: transparent; color: rgba(255,255,255,0.7); }
+
+    #btn-favorite.active { color: #facc15; }
+    #btn-recycle:not(:disabled):hover { color: #f87171; }
+
+    /* ── Tags panel ── */
+    #tags-panel {
+      flex-shrink: 0;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+      display: none;
+      flex-direction: column;
+    }
+
+    #tags-panel.open { display: flex; }
+
+    #tags-panel-current {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--border);
+      min-height: 40px;
+    }
+
+    #tags-panel-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* ── Tags picker zone ── */
+    #tags-picker-zone {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      padding: 0.5rem 1rem;
+    }
+
+    #tags-picker-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #tags-picker-search {
+      flex: 1;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-input);
+      color: var(--text-primary);
+      font-size: 0.8rem;
+      padding: 0.28rem 0.6rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #tags-picker-search:focus { border-color: var(--accent); }
+    #tags-picker-search::placeholder { color: var(--text-muted); }
+
+    #tags-picker-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      max-height: 68px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 0.1rem;
+    }
+
+    .tag-chip-picker {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.18rem 0.5rem;
+      border-radius: 99px;
+      font-size: 0.73rem;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+      white-space: nowrap;
+    }
+
+    .tag-chip-picker:hover { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--text-muted); }
+
+    .tag-chip-picker.active {
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+      color: var(--accent);
+      border-color: var(--accent);
+      font-weight: 500;
+    }
+
+    #tag-input-new {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-input);
+      color: var(--text-primary);
+      font-size: 0.82rem;
+      padding: 0.28rem 0.6rem;
+      outline: none;
+      width: 200px;
+      transition: border-color 0.2s;
+    }
+
+    #tag-input-new:focus { border-color: var(--accent); }
+    #tag-input-new::placeholder { color: var(--text-muted); }
+
+    /* ── Slideshow panel ── */
+    #slideshow-panel {
+      position: absolute;
+      top: 60px;
+      right: 1rem;
+      z-index: 20;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 1rem;
+      width: 220px;
+      box-shadow: var(--shadow-hover);
+      display: none;
+    }
+
+    #slideshow-panel.open { display: block; }
+
+    #slideshow-panel label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+
+    #slideshow-interval {
+      width: 100%;
+      margin-bottom: 0.75rem;
+    }
+
+    #interval-display {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: right;
+      margin-bottom: 0.5rem;
+    }
+
+    /* ── Fullscreen ── */
+    #viewer:fullscreen #top-bar,
+    #viewer:-webkit-full-screen #top-bar { display: none; }
+    #viewer:fullscreen #tags-panel,
+    #viewer:-webkit-full-screen #tags-panel { display: none !important; }
+    #viewer:fullscreen #action-controls,
+    #viewer:-webkit-full-screen #action-controls { display: none; }
+
+    /* ── Counter badge ── */
+    #img-counter {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* ── Separator ── */
+    .top-sep {
+      width: 1px; height: 20px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<div id="viewer">
+
+  <!-- Top bar -->
+  <div id="top-bar">
+    <button class="btn btn-ghost btn-sm" id="btn-back">← Back</button>
+    <div class="top-sep"></div>
+    <div id="img-info">
+      <div id="img-filename">—</div>
+      <div id="img-meta">—</div>
+    </div>
+    <span id="img-counter"></span>
+    <div class="top-sep"></div>
+    <div id="top-actions">
+      <button class="btn btn-ghost btn-sm" id="btn-nav-images">Images</button>
+      <button class="btn btn-ghost btn-sm" id="btn-nav-videos">Videos</button>
+      <button class="btn btn-ghost btn-sm" id="btn-nav-organize">Organize</button>
+      <button class="btn btn-ghost btn-sm" id="btn-random" title="Random image (R)">Random</button>
+      <button class="btn btn-ghost btn-sm" id="btn-open-with" title="Open with external software">Open with…</button>
+      <button class="btn btn-ghost btn-sm" id="btn-tags-toggle" title="Edit tags">Tags</button>
+      <button class="btn btn-ghost btn-sm" id="btn-slideshow-toggle" title="Slideshow">Slideshow</button>
+      <button class="btn-icon" id="btn-fullscreen" title="Fullscreen (F)">⛶</button>
+      <button class="btn-icon theme-toggle" id="theme-toggle-btn" title="Switch theme"></button>
+    </div>
+  </div>
+
+  <!-- Image area -->
+  <div id="image-area">
+    <button class="nav-arrow" id="btn-prev" title="Previous (←)">‹</button>
+
+    <div id="image-container">
+      <img id="main-image" class="loading" alt="" draggable="false" />
+    </div>
+
+    <button class="nav-arrow" id="btn-next" title="Next (→)">›</button>
+
+    <!-- Zoom controls -->
+    <div id="zoom-controls">
+      <button class="zoom-btn" id="btn-zoom-out" title="Zoom out">−</button>
+      <span id="zoom-label">100%</span>
+      <button class="zoom-btn" id="btn-zoom-in" title="Zoom in">+</button>
+      <button class="zoom-btn" id="btn-zoom-reset" title="Reset zoom">⌂</button>
+    </div>
+
+    <!-- Action controls (favorite / recycle) -->
+    <div id="action-controls">
+      <button class="action-btn" id="btn-favorite" title="Favorite (mark/unmark)">★</button>
+      <button class="action-btn" id="btn-recycle" title="Move to recycle bin">🗑</button>
+    </div>
+
+    <!-- Slideshow panel -->
+    <div id="slideshow-panel">
+      <label>Interval</label>
+      <div id="interval-display">3s</div>
+      <input type="range" id="slideshow-interval" min="1" max="30" value="3" step="1" />
+      <button class="btn btn-primary w-full" id="btn-slideshow-play">▶ Start</button>
+    </div>
+  </div>
+
+  <!-- Tags panel -->
+  <div id="tags-panel">
+    <!-- Zone 1: current image tags -->
+    <div id="tags-panel-current">
+      <span id="tags-panel-label">Tags:</span>
+      <div class="tags" id="tags-display"></div>
+    </div>
+    <!-- Zone 2: tag picker -->
+    <div id="tags-picker-zone">
+      <div id="tags-picker-header">
+        <input type="text" id="tags-picker-search" placeholder="Search tags…" autocomplete="off" />
+        <button class="btn btn-ghost btn-sm" id="btn-add-new-tag">+ New tag</button>
+      </div>
+      <div id="tags-picker-row"></div>
+      <input type="text" id="tag-input-new" class="hidden" placeholder="New tag… (Enter to add)" autocomplete="off" />
+    </div>
+  </div>
+
+</div>
+
+<!-- Slideshow progress bar -->
+<div class="slideshow-bar hidden" id="slideshow-bar" style="width:0%"></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/context-menu.js"></script>
+<script src="/js/image.js"></script>
+<script src="/js/navbar.js"></script>
+
+</body>
+</html>

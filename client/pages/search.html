@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Search — img-view</title>
+
+  <script>
+    const _t = localStorage.getItem('theme') || 'modern';
+    document.write('<link id="theme-link" rel="stylesheet" href="/css/theme-' + _t + '.css">');
+  </script>
+  <link rel="stylesheet" href="/css/base.css" />
+  <style>
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+
+    .tab {
+      padding: 0.55rem 1.1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+    }
+
+    .tab:hover { color: var(--text-primary); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-count {
+      display: inline-block;
+      background: var(--bg-tertiary);
+      border-radius: 99px;
+      font-size: 0.7rem;
+      padding: 0.05rem 0.45rem;
+      margin-left: 0.35rem;
+      color: var(--text-muted);
+    }
+
+    .tab.active .tab-count { background: var(--accent); color: #fff; }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    /* ── Section titles ── */
+    .results-section { margin-bottom: 2.5rem; }
+
+    .results-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-muted);
+      margin-bottom: 0.85rem;
+    }
+
+    /* ── Category label on image cards ── */
+    .card-category-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.1rem;
+    }
+
+    /* ── No results ── */
+    .no-results {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      padding: 0.5rem 0;
+    }
+
+    /* ── Hero search ── */
+    #hero-search {
+      max-width: 600px;
+      margin: 0 auto 2rem;
+    }
+
+    #hero-search .search-bar {
+      height: 48px;
+      font-size: 1rem;
+    }
+
+    #hero-search .search-bar input {
+      font-size: 1rem;
+      padding: 0 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a class="navbar-logo" href="/pages/home.html">img<span>·</span>view</a>
+      <div class="navbar-actions" style="margin-left:auto;">
+        <button class="btn btn-ghost" id="btn-nav-images">Images</button>
+        <button class="btn btn-ghost" id="btn-nav-videos">Videos</button>
+        <button class="btn btn-ghost" id="btn-nav-organize">Organize</button>
+        <button class="btn-icon theme-toggle" id="theme-toggle-btn"></button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container page">
+
+    <!-- Hero search input -->
+    <div id="hero-search">
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="Search images, categories… or #tag" autocomplete="off" autofocus />
+        <button id="search-clear" class="hidden" title="Clear">✕</button>
+      </div>
+    </div>
+
+    <div class="page-layout">
+
+      <!-- Tag sidebar -->
+      <aside class="tag-sidebar">
+        <div class="tag-sidebar-header">
+          <span class="tag-sidebar-title">Tags</span>
+          <button class="tag-sidebar-clear hidden" id="btn-clear-tags">Clear</button>
+        </div>
+        <div id="tag-sidebar-list" class="tag-sidebar-list">
+          <span class="tag-sidebar-empty">Loading…</span>
+        </div>
+      </aside>
+
+      <div class="page-content">
+
+        <!-- Result count -->
+        <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
+          <span id="total-count" style="font-size:0.8rem;color:var(--text-muted);"></span>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab active" data-tab="all">
+            All <span class="tab-count" id="count-all">0</span>
+          </button>
+          <button class="tab" data-tab="images">
+            Images <span class="tab-count" id="count-images">0</span>
+          </button>
+          <button class="tab" data-tab="categories">
+            Categories <span class="tab-count" id="count-categories">0</span>
+          </button>
+        </div>
+
+        <!-- Loading -->
+        <div id="state-loading" class="spinner hidden"></div>
+
+        <!-- Empty / initial state -->
+        <div id="state-initial" class="empty-state">
+          <div class="icon">🔍</div>
+          <p>Type something or select tags to search across all images and categories.</p>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="hidden">
+
+          <!-- All tab -->
+          <div id="tab-all">
+            <div class="results-section" id="all-categories-section">
+              <div class="results-title">Categories</div>
+              <div id="all-categories-grid" class="image-grid" style="--grid-cols:5;"></div>
+              <p class="no-results hidden" id="all-categories-none">No matching categories.</p>
+            </div>
+            <div class="results-section" id="all-images-section">
+              <div class="results-title">Images</div>
+              <div id="all-images-grid" class="image-grid" style="--grid-cols:5;"></div>
+              <p class="no-results hidden" id="all-images-none">No matching images.</p>
+            </div>
+          </div>
+
+          <!-- Images tab -->
+          <div id="tab-images" class="hidden">
+            <div id="images-grid" class="image-grid" style="--grid-cols:5;"></div>
+            <p class="no-results hidden" id="images-none">No matching images.</p>
+          </div>
+
+          <!-- Categories tab -->
+          <div id="tab-categories" class="hidden">
+            <div id="categories-grid" class="image-grid" style="--grid-cols:5;"></div>
+            <p class="no-results hidden" id="categories-none">No matching categories.</p>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/js/theme.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/search.js"></script>
+  <script src="/js/navbar.js"></script>
+</body>
+</html>
