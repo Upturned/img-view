@@ -57,6 +57,11 @@
         <button class="btn-icon" id="btn-order" title="Toggle sort order">↑</button>
       </div>
 
+      <div class="toolbar-group">
+        <button class="btn btn-ghost btn-sm" id="btn-favorites-filter" title="Show only favorites">★ Favorites</button>
+        <button class="btn btn-ghost btn-sm" id="btn-tag-all" title="Add a tag to all visible images">Tag all…</button>
+      </div>
+
       <div class="toolbar-group" style="margin-left:auto;">
         <label for="size-slider">Size</label>
         <input type="range" class="size-slider" id="size-slider" min="2" max="10" value="5" step="1" />
@@ -71,16 +76,6 @@
     <!-- Sidebar + grid layout -->
     <div class="page-layout">
 
-      <aside class="tag-sidebar">
-        <div class="tag-sidebar-header">
-          <span class="tag-sidebar-title">Tags</span>
-          <button class="tag-sidebar-clear hidden" id="btn-clear-tags">Clear</button>
-        </div>
-        <div id="tag-sidebar-list" class="tag-sidebar-list">
-          <span class="tag-sidebar-empty">Loading…</span>
-        </div>
-      </aside>
-
       <div class="page-content">
         <div id="image-grid" class="image-grid" style="--grid-cols: 5;"></div>
         <div id="state-loading" class="spinner"></div>
@@ -89,6 +84,21 @@
           <p>No images found.</p>
         </div>
       </div>
+
+      <aside class="tag-sidebar">
+        <div class="tag-sidebar-header">
+          <span class="tag-sidebar-title">Tags</span>
+          <button class="tag-sidebar-clear hidden" id="btn-clear-tags">Clear</button>
+        </div>
+        <input type="text" class="tag-sidebar-search" id="tag-sidebar-search" placeholder="Search tags…" autocomplete="off" />
+        <div class="tag-sidebar-sort-row">
+          <button class="tag-sidebar-sort-btn active" id="tag-sort-name" data-sort="name">Name</button>
+          <button class="tag-sidebar-sort-btn" id="tag-sort-count" data-sort="count">Count</button>
+        </div>
+        <div id="tag-sidebar-list" class="tag-sidebar-list">
+          <span class="tag-sidebar-empty">Loading…</span>
+        </div>
+      </aside>
 
     </div>
 
@@ -133,6 +143,11 @@
       color: #fff;
       border-color: var(--accent);
     }
+    #btn-favorites-filter.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
     .select-mode .card { cursor: crosshair; }
     .select-mode .card:hover { outline: 2px solid var(--border); }
     .select-mode .card.selected { outline: 2px solid var(--accent); }
@@ -161,6 +176,20 @@
       color: #fff;
     }
   </style>
+
+  <!-- Tag all modal -->
+  <div id="modal-tag-all" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">Tag all visible images</div>
+      <p id="tag-all-subtitle" style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.75rem;"></p>
+      <input class="input" id="tag-all-input" type="text" placeholder="Search or type a tag…" autocomplete="off" />
+      <div id="tag-all-chips" style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.6rem;max-height:180px;overflow-y:auto;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="btn-tag-all-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-tag-all-confirm" disabled>Add tag</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/js/theme.js"></script>
   <script src="/js/api.js"></script>

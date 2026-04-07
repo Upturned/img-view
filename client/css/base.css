@@ -179,12 +179,26 @@ small { font-size: 0.8rem; color: var(--text-secondary); }
 
 /* --- Cards --- */
 .card {
+  position: relative;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   overflow: hidden;
   transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
   cursor: pointer;
+}
+
+/* Favorite star badge on cards (bottom-left overlay) */
+.card-star-badge {
+  position: absolute;
+  bottom: 2.4rem;
+  left: 0.45rem;
+  z-index: 2;
+  font-size: 0.85rem;
+  color: #facc15;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  pointer-events: none;
 }
 
 .card:hover {
@@ -559,7 +573,7 @@ small { font-size: 0.8rem; color: var(--text-secondary); }
 }
 
 .tag-chip {
-  display: block;
+  display: flex;
   width: 100%;
   text-align: left;
   padding: 0.3rem 0.55rem;
@@ -570,9 +584,6 @@ small { font-size: 0.8rem; color: var(--text-secondary); }
   border: 1px solid transparent;
   cursor: pointer;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .tag-chip:hover { background: var(--bg-tertiary); color: var(--text-primary); }
@@ -582,6 +593,109 @@ small { font-size: 0.8rem; color: var(--text-secondary); }
   color: var(--accent);
   border-color: var(--accent);
   font-weight: 500;
+}
+
+/* --- Tag chip picker (used in image page tag panel and category "tag all" modal) --- */
+.tag-chip-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+
+.tag-chip-picker:hover { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--text-muted); }
+
+.tag-chip-picker.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 500;
+}
+
+/* --- Tag sidebar enhancements --- */
+.tag-sidebar-search {
+  display: block;
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  padding: 0.28rem 0.5rem;
+  outline: none;
+  margin-bottom: 0.4rem;
+  transition: border-color 0.2s;
+}
+
+.tag-sidebar-search:focus { border-color: var(--accent); }
+.tag-sidebar-search::placeholder { color: var(--text-muted); }
+
+.tag-sidebar-sort-row {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.4rem;
+}
+
+.tag-sidebar-sort-btn {
+  flex: 1;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.4rem;
+  border-radius: var(--radius-btn);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.tag-sidebar-sort-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+.tag-sidebar-sort-btn.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Tag chip label + count layout */
+.tag-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+}
+
+.tag-chip-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-count {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-radius: 99px;
+  padding: 0 0.35rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.tag-chip.active .tag-count {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--accent);
 }
 
 /* --- Utility classes --- */

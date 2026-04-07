@@ -1,19 +1,24 @@
-// Home page — categories grid, search, random, loose files banner
+// Home page — categories grid, search, random, loose files banner, favorites, recycle bin
 
 const searchInput    = document.getElementById('search-input');
 const searchClear    = document.getElementById('search-clear');
 const sectionCats    = document.getElementById('section-categories');
 const sectionSearch  = document.getElementById('section-search');
+const sectionFavs    = document.getElementById('section-favorites');
 const catsGrid       = document.getElementById('categories-grid');
 const catsEmpty      = document.getElementById('categories-empty');
 const catsTitle      = document.getElementById('categories-title');
+const btnFavorites   = document.getElementById('btn-favorites');
 
-let activeTags = new Set();
+let activeTags    = new Set();
+let favoritesMode = false;
+let favoritesData = {};           // { "category/filename": true }
+let allTagsData   = [];           // [{ tag, count }] from server
+let tagSortMode   = 'name';       // 'name' | 'count'
+let tagSearchQuery = '';
 
 // --- Theme toggle ---
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
-
-// Videos/Images navigation is handled by navbar.js
 
 // --- Global random ---
 document.getElementById('btn-random-global').addEventListener('click', async () => {
@@ -25,37 +30,155 @@ document.getElementById('btn-random-global').addEventListener('click', async () 
   }
 });
 
-// --- Tag sidebar ---
-async function buildTagSidebar() {
-  const list    = document.getElementById('tag-sidebar-list');
-  const clearBtn = document.getElementById('btn-clear-tags');
+// --- Favorites button ---
+btnFavorites.addEventListener('click', () => {
+  if (favoritesMode) {
+    exitFavoritesMode();
+  } else {
+    enterFavoritesMode();
+  }
+});
+
+function enterFavoritesMode() {
+  favoritesMode = true;
+  btnFavorites.classList.add('btn-primary');
+  btnFavorites.classList.remove('btn-ghost');
+  searchInput.value = '';
+  searchClear.classList.add('hidden');
+  activeTags.clear();
+  updateTagSidebarActiveStates();
+  showFavoritesSection();
+}
+
+function exitFavoritesMode() {
+  favoritesMode = false;
+  btnFavorites.classList.remove('btn-primary');
+  btnFavorites.classList.add('btn-ghost');
+  showCategories();
+}
+
+async function showFavoritesSection() {
+  sectionCats.classList.add('hidden');
+  sectionSearch.classList.add('hidden');
+  sectionFavs.classList.remove('hidden');
+
+  const favGrid  = document.getElementById('favorites-grid');
+  const favEmpty = document.getElementById('favorites-empty');
+
   try {
-    const tags = await api.getUniqueTags();
-    if (tags.length === 0) {
-      list.innerHTML = '<span class="tag-sidebar-empty">No tags yet.</span>';
+    favoritesData = await api.getFavorites();
+    const keys = Object.keys(favoritesData);
+    if (keys.length === 0) {
+      favGrid.innerHTML = '';
+      favEmpty.classList.remove('hidden');
       return;
     }
-    list.innerHTML = tags.map(tag =>
-      `<button class="tag-chip${activeTags.has(tag) ? ' active' : ''}" data-tag="${escHtml(tag)}">${escHtml(tag)}</button>`
-    ).join('');
-    list.querySelectorAll('.tag-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const tag = chip.dataset.tag;
-        if (activeTags.has(tag)) { activeTags.delete(tag); chip.classList.remove('active'); }
-        else                     { activeTags.add(tag);    chip.classList.add('active'); }
-        clearBtn.classList.toggle('hidden', activeTags.size === 0);
-        onTagsChanged();
+    favEmpty.classList.add('hidden');
+    const images = keys.map(key => {
+      const slash = key.indexOf('/');
+      const category = key.slice(0, slash);
+      const filename = key.slice(slash + 1);
+      return { category, filename, name: filename.replace(/\.[^.]+$/, '') };
+    });
+    favGrid.innerHTML = images.map(img => imageSearchCard(img, true)).join('');
+    favGrid.querySelectorAll('.card').forEach((card, i) => {
+      card.addEventListener('click', () => {
+        sessionStorage.setItem('imageList', JSON.stringify(images));
+        sessionStorage.setItem('imageListMeta', JSON.stringify({}));
+        goTo('image', { category: images[i].category, filename: images[i].filename, index: i });
       });
     });
-  } catch {
-    list.innerHTML = '<span class="tag-sidebar-empty">Failed to load.</span>';
+  } catch (err) {
+    showToast('Failed to load favorites.', 'error');
   }
 }
 
+// --- Tag sidebar ---
+async function buildTagSidebar() {
+  try {
+    allTagsData = await api.getUniqueTags();
+  } catch {
+    allTagsData = [];
+  }
+  renderTagSidebar();
+}
+
+function renderTagSidebar() {
+  const list     = document.getElementById('tag-sidebar-list');
+  const clearBtn = document.getElementById('btn-clear-tags');
+
+  let items = [...allTagsData];
+
+  // Apply search filter
+  if (tagSearchQuery) {
+    items = items.filter(({ tag }) => tag.includes(tagSearchQuery));
+  }
+
+  // Apply sort
+  if (tagSortMode === 'count') {
+    items.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  } else {
+    items.sort((a, b) => a.tag.localeCompare(b.tag));
+  }
+
+  if (items.length === 0) {
+    list.innerHTML = '<span class="tag-sidebar-empty">No tags yet.</span>';
+    clearBtn.classList.add('hidden');
+    return;
+  }
+
+  list.innerHTML = items.map(({ tag, count }) =>
+    `<button class="tag-chip${activeTags.has(tag) ? ' active' : ''}" data-tag="${escHtml(tag)}">
+      <span class="tag-chip-label">${escHtml(tag)}</span>
+      <span class="tag-count">${count}</span>
+    </button>`
+  ).join('');
+
+  list.querySelectorAll('.tag-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const tag = chip.dataset.tag;
+      if (activeTags.has(tag)) { activeTags.delete(tag); chip.classList.remove('active'); }
+      else                     { activeTags.add(tag);    chip.classList.add('active'); }
+      clearBtn.classList.toggle('hidden', activeTags.size === 0);
+      if (favoritesMode) exitFavoritesMode();
+      onTagsChanged();
+    });
+  });
+
+  clearBtn.classList.toggle('hidden', activeTags.size === 0);
+}
+
+function updateTagSidebarActiveStates() {
+  document.querySelectorAll('#tag-sidebar-list .tag-chip').forEach(chip => {
+    chip.classList.toggle('active', activeTags.has(chip.dataset.tag));
+  });
+  document.getElementById('btn-clear-tags').classList.toggle('hidden', activeTags.size === 0);
+}
+
+// Tag sidebar: search input
+document.getElementById('tag-sidebar-search').addEventListener('input', (e) => {
+  tagSearchQuery = e.target.value.trim().toLowerCase();
+  renderTagSidebar();
+});
+
+// Tag sidebar: sort buttons
+document.getElementById('tag-sort-name').addEventListener('click', () => {
+  tagSortMode = 'name';
+  document.getElementById('tag-sort-name').classList.add('active');
+  document.getElementById('tag-sort-count').classList.remove('active');
+  renderTagSidebar();
+});
+
+document.getElementById('tag-sort-count').addEventListener('click', () => {
+  tagSortMode = 'count';
+  document.getElementById('tag-sort-count').classList.add('active');
+  document.getElementById('tag-sort-name').classList.remove('active');
+  renderTagSidebar();
+});
+
 document.getElementById('btn-clear-tags').addEventListener('click', () => {
   activeTags.clear();
-  document.querySelectorAll('#tag-sidebar-list .tag-chip').forEach(c => c.classList.remove('active'));
-  document.getElementById('btn-clear-tags').classList.add('hidden');
+  updateTagSidebarActiveStates();
   onTagsChanged();
 });
 
@@ -122,8 +245,6 @@ function categoryCard(cat) {
 // --- Search ---
 let searchDebounce = null;
 
-// Parse "#tagname" out of a raw search string.
-// Returns { q: remaining text, tag: extracted tag or '' }
 function parseSearchQuery(raw) {
   const tagMatch = raw.match(/#(\S+)/);
   const tag = tagMatch ? tagMatch[1].toLowerCase() : '';
@@ -131,7 +252,6 @@ function parseSearchQuery(raw) {
   return { q, tag };
 }
 
-// Enter → go to dedicated search page
 searchInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     const { q, tag: barTag } = parseSearchQuery(searchInput.value.trim());
@@ -149,6 +269,8 @@ searchInput.addEventListener('keydown', (e) => {
 searchInput.addEventListener('input', () => {
   const raw = searchInput.value.trim();
   searchClear.classList.toggle('hidden', raw.length === 0);
+
+  if (favoritesMode) exitFavoritesMode();
 
   clearTimeout(searchDebounce);
   if (raw.length === 0 && activeTags.size === 0) {
@@ -169,17 +291,18 @@ searchClear.addEventListener('click', () => {
 function showCategories() {
   sectionCats.classList.remove('hidden');
   sectionSearch.classList.add('hidden');
+  sectionFavs.classList.add('hidden');
 }
 
 async function runSearch(raw) {
   const { q, tag: barTag } = parseSearchQuery(raw);
-  const allTags = [...activeTags, ...(barTag ? [barTag] : [])];
+  const allTagsList = [...activeTags, ...(barTag ? [barTag] : [])];
   try {
-    const results = await api.search(q, 'all', allTags);
+    const results = await api.search(q, 'all', allTagsList);
     sectionCats.classList.add('hidden');
     sectionSearch.classList.remove('hidden');
+    sectionFavs.classList.add('hidden');
 
-    // Categories
     const catGrid  = document.getElementById('search-categories-grid');
     const catEmpty = document.getElementById('search-categories-empty');
     if (results.categories.length === 0) {
@@ -193,7 +316,6 @@ async function runSearch(raw) {
       });
     }
 
-    // Images
     const imgGrid  = document.getElementById('search-images-grid');
     const imgEmpty = document.getElementById('search-images-empty');
     if (results.images.length === 0) {
@@ -201,7 +323,7 @@ async function runSearch(raw) {
       imgEmpty.classList.remove('hidden');
     } else {
       imgEmpty.classList.add('hidden');
-      imgGrid.innerHTML = results.images.map(img => imageSearchCard(img)).join('');
+      imgGrid.innerHTML = results.images.map(img => imageSearchCard(img, !!favoritesData[`${img.category}/${img.filename}`])).join('');
       imgGrid.querySelectorAll('.card').forEach((card, i) => {
         card.addEventListener('click', () => {
           goTo('image', { category: results.images[i].category, filename: results.images[i].filename, from: 'search', q });
@@ -213,10 +335,11 @@ async function runSearch(raw) {
   }
 }
 
-function imageSearchCard(img) {
+function imageSearchCard(img, isFav = false) {
   return `
     <div class="card" tabindex="0" role="button" aria-label="Open image ${img.filename}">
-      <img class="card-cover" src="${thumbUrl(img.category, img.filename)}" alt="${img.name}" loading="lazy" />
+      ${isFav ? '<div class="card-star-badge">★</div>' : ''}
+      <img class="card-cover" src="${thumbUrl(img.category, img.filename)}" alt="${escHtml(img.name)}" loading="lazy" />
       <div class="card-body">
         <div class="card-title">${escHtml(img.name)}</div>
         <div class="card-category-label">${escHtml(img.category)}</div>
@@ -303,6 +426,70 @@ document.getElementById('btn-dismiss-banner').addEventListener('click', () => {
   document.getElementById('loose-banner').classList.add('hidden');
 });
 
+// --- Recycle bin modal ---
+const modalRecycleBin = document.getElementById('modal-recycle-bin');
+
+document.getElementById('btn-recycle-close').addEventListener('click', () => {
+  modalRecycleBin.classList.add('hidden');
+});
+
+modalRecycleBin.addEventListener('click', (e) => {
+  if (e.target === modalRecycleBin) modalRecycleBin.classList.add('hidden');
+});
+
+async function openRecycleBin() {
+  modalRecycleBin.classList.remove('hidden');
+  await loadRecycleBin();
+}
+
+async function loadRecycleBin() {
+  const list  = document.getElementById('recycle-bin-list');
+  const empty = document.getElementById('recycle-bin-empty');
+  list.innerHTML = '<div class="spinner"></div>';
+  empty.classList.add('hidden');
+
+  try {
+    const files = await api.getRecycleBin();
+    if (files.length === 0) {
+      list.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    list.innerHTML = files.map(f => `
+      <div class="recycle-item" data-filename="${escHtml(f.filename)}">
+        <img class="recycle-item-thumb" src="/images/recycle-bin/${encodeURIComponent(f.filename)}" alt="${escHtml(f.filename)}" />
+        <span class="recycle-item-name" title="${escHtml(f.filename)}">${escHtml(f.filename)}</span>
+        <div class="recycle-item-actions">
+          <button class="btn btn-ghost btn-sm btn-restore">Restore</button>
+          <button class="btn btn-ghost btn-sm btn-delete-perm" style="color:var(--color-error,#f87171)">Delete</button>
+        </div>
+      </div>`).join('');
+
+    list.querySelectorAll('.recycle-item').forEach(item => {
+      const filename = item.dataset.filename;
+      item.querySelector('.btn-restore').addEventListener('click', async () => {
+        try {
+          await api.restoreFromRecycleBin(filename);
+          showToast(`"${filename}" restored to loose-images.`, 'success');
+          await loadRecycleBin();
+          await loadCategories();
+        } catch (err) { showToast(err.message, 'error'); }
+      });
+      item.querySelector('.btn-delete-perm').addEventListener('click', async () => {
+        if (!confirm(`Permanently delete "${filename}"? This cannot be undone.`)) return;
+        try {
+          await api.deleteFromRecycleBin(filename);
+          showToast(`"${filename}" permanently deleted.`, 'success');
+          await loadRecycleBin();
+        } catch (err) { showToast(err.message, 'error'); }
+      });
+    });
+  } catch (err) {
+    list.innerHTML = `<p style="color:var(--text-muted);font-size:.875rem;">Failed to load: ${escHtml(err.message)}</p>`;
+  }
+}
+
 // --- Keyboard: Enter on card ---
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && document.activeElement.classList.contains('card')) {
@@ -314,7 +501,8 @@ document.addEventListener('keydown', (e) => {
 contextMenu.on(document.querySelector('main'), (e) => {
   if (e.target.closest('.card') || e.target.closest('.modal-overlay')) return null;
   return [
-    { icon: '➕', label: 'New category', action: () => document.getElementById('btn-new-category').click() },
+    { icon: '➕', label: 'New category',  action: () => document.getElementById('btn-new-category').click() },
+    { icon: '🗑', label: 'Recycle bin…', action: () => openRecycleBin() },
   ];
 });
 
@@ -324,6 +512,11 @@ function escHtml(str) {
 }
 
 // --- Init ---
-loadCategories();
-checkLooseFiles();
-buildTagSidebar();
+async function init() {
+  favoritesData = await api.getFavorites().catch(() => ({}));
+  loadCategories();
+  checkLooseFiles();
+  buildTagSidebar();
+}
+
+init();

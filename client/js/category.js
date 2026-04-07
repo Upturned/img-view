@@ -4,14 +4,18 @@ const params       = new URLSearchParams(location.search);
 const categoryName = params.get('name') || '';
 
 // State
-let allImages    = [];   // full list from server (sorted, no tag filter)
+let allImages    = [];   // full list from server
 let allTagsData  = {};   // full tags.json { "cat/file": [...tags] }
-let displayList  = [];   // after client-side name + tag filters
+let favoritesData = {};  // { "cat/file": true }
+let displayList  = [];   // after client-side filters
 let sortOrder    = 'asc';
-let activeTags   = new Set(); // currently selected sidebar tags
+let activeTags   = new Set();
 let nameFilter   = '';
+let favoritesOnly = false;
+let tagSortMode  = 'name';   // 'name' | 'count'
+let tagSearchQuery = '';
 let selectionMode = false;
-let selectedSet   = new Set(); // Set of filenames currently selected
+let selectedSet   = new Set();
 
 // DOM refs
 const grid           = document.getElementById('image-grid');
@@ -24,6 +28,7 @@ const sizeSlider     = document.getElementById('size-slider');
 const searchInput    = document.getElementById('search-input');
 const searchClear    = document.getElementById('search-clear');
 const btnSelectMode  = document.getElementById('btn-select-mode');
+const btnFavsFilter  = document.getElementById('btn-favorites-filter');
 const selectionBar   = document.getElementById('selection-bar');
 const selectionCount = document.getElementById('selection-count');
 
@@ -32,12 +37,18 @@ document.title = `${categoryName} — img-view`;
 document.getElementById('breadcrumb-name').textContent = categoryName;
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
 
-// Restore saved slider position
 const savedCols = localStorage.getItem('grid-cols');
 if (savedCols) {
   sizeSlider.value = savedCols;
   grid.style.setProperty('--grid-cols', savedCols);
 }
+
+// --- Favorites filter button ---
+btnFavsFilter.addEventListener('click', () => {
+  favoritesOnly = !favoritesOnly;
+  btnFavsFilter.classList.toggle('active', favoritesOnly);
+  applyFilters();
+});
 
 // --- Load images ---
 async function loadImages() {
@@ -47,9 +58,10 @@ async function loadImages() {
 
   try {
     const queryParams = { sort: sortSelect.value, order: sortOrder };
-    [allImages, allTagsData] = await Promise.all([
+    [allImages, allTagsData, favoritesData] = await Promise.all([
       api.getCategoryImages(categoryName, queryParams),
       api.getAllTags(),
+      api.getFavorites(),
     ]);
     buildTagSidebar();
     applyFilters();
@@ -61,26 +73,43 @@ async function loadImages() {
 
 // --- Build / refresh the tag sidebar ---
 function buildTagSidebar() {
-  const list    = document.getElementById('tag-sidebar-list');
+  const list     = document.getElementById('tag-sidebar-list');
   const clearBtn = document.getElementById('btn-clear-tags');
 
-  // Compute which tags exist in this category
-  const catTags = new Set();
+  // Compute tag counts scoped to this category
+  const counts = {};
   for (const img of allImages) {
     const key = `${img.category}/${img.filename}`;
-    (allTagsData[key] || []).forEach(t => catTags.add(t));
+    for (const tag of (allTagsData[key] || [])) {
+      counts[tag] = (counts[tag] || 0) + 1;
+    }
   }
 
-  const sorted = [...catTags].sort();
+  let items = Object.entries(counts).map(([tag, count]) => ({ tag, count }));
 
-  if (sorted.length === 0) {
+  // Apply search filter
+  if (tagSearchQuery) {
+    items = items.filter(({ tag }) => tag.includes(tagSearchQuery));
+  }
+
+  // Apply sort
+  if (tagSortMode === 'count') {
+    items.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  } else {
+    items.sort((a, b) => a.tag.localeCompare(b.tag));
+  }
+
+  if (items.length === 0) {
     list.innerHTML = '<span class="tag-sidebar-empty">No tags here yet.</span>';
     clearBtn.classList.add('hidden');
     return;
   }
 
-  list.innerHTML = sorted.map(tag =>
-    `<button class="tag-chip${activeTags.has(tag) ? ' active' : ''}" data-tag="${escHtml(tag)}">${escHtml(tag)}</button>`
+  list.innerHTML = items.map(({ tag, count }) =>
+    `<button class="tag-chip${activeTags.has(tag) ? ' active' : ''}" data-tag="${escHtml(tag)}">
+      <span class="tag-chip-label">${escHtml(tag)}</span>
+      <span class="tag-count">${count}</span>
+    </button>`
   ).join('');
 
   list.querySelectorAll('.tag-chip').forEach(chip => {
@@ -96,7 +125,28 @@ function buildTagSidebar() {
   clearBtn.classList.toggle('hidden', activeTags.size === 0);
 }
 
-// --- Apply name + tag filters client-side ---
+// Tag sidebar: search input
+document.getElementById('tag-sidebar-search').addEventListener('input', (e) => {
+  tagSearchQuery = e.target.value.trim().toLowerCase();
+  buildTagSidebar();
+});
+
+// Tag sidebar: sort buttons
+document.getElementById('tag-sort-name').addEventListener('click', () => {
+  tagSortMode = 'name';
+  document.getElementById('tag-sort-name').classList.add('active');
+  document.getElementById('tag-sort-count').classList.remove('active');
+  buildTagSidebar();
+});
+
+document.getElementById('tag-sort-count').addEventListener('click', () => {
+  tagSortMode = 'count';
+  document.getElementById('tag-sort-count').classList.add('active');
+  document.getElementById('tag-sort-name').classList.remove('active');
+  buildTagSidebar();
+});
+
+// --- Apply name + tag + favorites filters client-side ---
 function applyFilters() {
   let list = allImages;
 
@@ -114,6 +164,10 @@ function applyFilters() {
       img.filename.toLowerCase().includes(q) ||
       img.name.toLowerCase().includes(q)
     );
+  }
+
+  if (favoritesOnly) {
+    list = list.filter(img => !!favoritesData[`${img.category}/${img.filename}`]);
   }
 
   displayList = list;
@@ -142,10 +196,7 @@ function renderGrid() {
       if (entry.isIntersecting) {
         const el = entry.target;
         const src = el.dataset.src;
-        if (src) {
-          el.src = src;
-          el.removeAttribute('data-src');
-        }
+        if (src) { el.src = src; el.removeAttribute('data-src'); }
         observer.unobserve(el);
       }
     });
@@ -164,11 +215,15 @@ function renderGrid() {
 
     contextMenu.on(card, () => {
       const img = displayList[i];
+      const key = `${img.category}/${img.filename}`;
+      const isFav = !!favoritesData[key];
       return [
         { icon: '🖼', label: 'View image',  action: () => openImage(i) },
         { label: '---' },
+        { icon: '★',  label: isFav ? 'Remove favorite' : 'Add to favorites', action: () => toggleFavoriteCard(img, i) },
+        { icon: '🗑', label: 'Move to recycle bin', action: () => recycleCard(img, i), disabled: isFav },
+        { label: '---' },
         { icon: '✏️', label: 'Rename',      action: () => ctxRename(img.category, img.filename, 'image', (newName) => {
-            // Update the list in memory so the grid reflects the change immediately
             displayList[i] = { ...displayList[i], filename: newName, name: newName.slice(0, newName.lastIndexOf('.')) };
             renderGrid();
           })
@@ -193,9 +248,12 @@ function renderGrid() {
 
 function imageCard(img) {
   const selected = selectedSet.has(img.filename) ? ' selected' : '';
+  const key = `${img.category}/${img.filename}`;
+  const isFav = !!favoritesData[key];
   return `
     <div class="card${selected}" tabindex="0" role="button" aria-label="Open ${img.filename}">
       <div class="card-select-check">✓</div>
+      ${isFav ? '<div class="card-star-badge">★</div>' : ''}
       <img
         class="card-cover"
         data-src="${thumbUrl(img.category, img.filename)}"
@@ -208,10 +266,34 @@ function imageCard(img) {
     </div>`;
 }
 
+async function toggleFavoriteCard(img, i) {
+  const key = `${img.category}/${img.filename}`;
+  try {
+    const result = await api.toggleFavorite(img.category, img.filename);
+    if (result.favorited) favoritesData[key] = true;
+    else delete favoritesData[key];
+    renderGrid();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function recycleCard(img, i) {
+  const key = `${img.category}/${img.filename}`;
+  if (favoritesData[key]) { showToast('Remove favorite first.', 'error'); return; }
+  try {
+    await api.recycleImage(img.category, img.filename);
+    showToast(`"${img.filename}" moved to recycle bin.`, 'success');
+    displayList.splice(i, 1);
+    allImages = allImages.filter(im => im.filename !== img.filename || im.category !== img.category);
+    renderGrid();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
 function openImage(index) {
   const img = displayList[index];
-  // Pass the current sort/filter state so image view can replicate the same order
-  // Store full list in sessionStorage so image view page can navigate prev/next
   sessionStorage.setItem('imageList', JSON.stringify(displayList));
   sessionStorage.setItem('imageListMeta', JSON.stringify({ category: categoryName, sort: sortSelect.value, order: sortOrder }));
   goTo('image', { category: img.category, filename: img.filename, index });
@@ -241,7 +323,6 @@ orderBtn.addEventListener('click', () => {
   sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
   orderBtn.textContent = sortOrder === 'asc' ? '↑' : '↓';
   orderBtn.title = sortOrder === 'asc' ? 'Ascending' : 'Descending';
-  // Random sort ignores order
   if (sortSelect.value !== 'random') loadImages();
 });
 
@@ -278,7 +359,6 @@ contextMenu.on(document.querySelector('main'), (e) => {
 });
 
 // --- Selection mode ---
-
 function toggleSelect(index, cardEl) {
   const img = displayList[index];
   if (selectedSet.has(img.filename)) {
@@ -305,7 +385,7 @@ function enterSelectionMode() {
   btnSelectMode.classList.add('active');
   selectionBar.classList.remove('hidden');
   updateSelectionBar();
-  renderGrid(); // re-render to show checkboxes
+  renderGrid();
 }
 
 function exitSelectionMode() {
@@ -325,12 +405,8 @@ document.getElementById('btn-select-cancel').addEventListener('click', exitSelec
 
 document.getElementById('btn-select-all').addEventListener('click', () => {
   const allSelected = selectedSet.size === displayList.length;
-  if (allSelected) {
-    selectedSet.clear();
-  } else {
-    displayList.forEach(img => selectedSet.add(img.filename));
-  }
-  // Update card classes without full re-render
+  if (allSelected) { selectedSet.clear(); }
+  else { displayList.forEach(img => selectedSet.add(img.filename)); }
   grid.querySelectorAll('.card').forEach((card, i) => {
     const img = displayList[i];
     if (img) card.classList.toggle('selected', selectedSet.has(img.filename));
@@ -355,14 +431,10 @@ document.getElementById('btn-select-move').addEventListener('click', async () =>
           showToast(msg, result.errors.length ? 'error' : 'success');
           exitSelectionMode();
           await loadImages();
-        } catch (err) {
-          showToast(err.message, 'error');
-        }
+        } catch (err) { showToast(err.message, 'error'); }
       }
     );
-  } catch (err) {
-    showToast('Failed to load categories: ' + err.message, 'error');
-  }
+  } catch (err) { showToast('Failed to load categories: ' + err.message, 'error'); }
 });
 
 document.getElementById('btn-select-copy').addEventListener('click', async () => {
@@ -381,13 +453,100 @@ document.getElementById('btn-select-copy').addEventListener('click', async () =>
             : `Copied ${result.copied} image${result.copied !== 1 ? 's' : ''} to "${dest}".`;
           showToast(msg, result.errors.length ? 'error' : 'success');
           exitSelectionMode();
-        } catch (err) {
-          showToast(err.message, 'error');
-        }
+        } catch (err) { showToast(err.message, 'error'); }
       }
     );
+  } catch (err) { showToast('Failed to load categories: ' + err.message, 'error'); }
+});
+
+// --- Tag all modal ---
+const modalTagAll     = document.getElementById('modal-tag-all');
+const tagAllInput     = document.getElementById('tag-all-input');
+const tagAllChips     = document.getElementById('tag-all-chips');
+const tagAllSubtitle  = document.getElementById('tag-all-subtitle');
+const btnTagAllConfirm = document.getElementById('btn-tag-all-confirm');
+let tagAllKnownTags   = [];   // [{ tag, count }] loaded when modal opens
+
+document.getElementById('btn-tag-all').addEventListener('click', async () => {
+  if (displayList.length === 0) { showToast('No visible images to tag.', 'error'); return; }
+
+  tagAllSubtitle.textContent = `This will add one tag to ${displayList.length} image${displayList.length !== 1 ? 's' : ''} (does not replace existing tags).`;
+  tagAllInput.value = '';
+  btnTagAllConfirm.disabled = true;
+  btnTagAllConfirm.textContent = 'Add tag';
+  tagAllChips.innerHTML = '<span style="font-size:0.78rem;color:var(--text-muted)">Loading tags…</span>';
+  modalTagAll.classList.remove('hidden');
+  tagAllInput.focus();
+
+  try {
+    tagAllKnownTags = await api.getUniqueTags(categoryName);
+  } catch { tagAllKnownTags = []; }
+  renderTagAllChips('');
+});
+
+function renderTagAllChips(query) {
+  const q = query.toLowerCase();
+  const visible = tagAllKnownTags.filter(({ tag }) => !q || tag.includes(q));
+  const selected = tagAllInput.value.trim().toLowerCase();
+
+  if (visible.length === 0 && !query) {
+    tagAllChips.innerHTML = '<span style="font-size:0.78rem;color:var(--text-muted)">No tags yet in this category.</span>';
+    return;
+  }
+
+  tagAllChips.innerHTML = visible.map(({ tag, count }) =>
+    `<button class="tag-chip-picker${tag === selected ? ' active' : ''}" data-tag="${escHtml(tag)}">
+      ${escHtml(tag)} <span style="font-size:0.68rem;opacity:0.6">${count}</span>
+    </button>`
+  ).join('');
+
+  tagAllChips.querySelectorAll('.tag-chip-picker').forEach(chip => {
+    chip.addEventListener('click', () => {
+      tagAllInput.value = chip.dataset.tag;
+      btnTagAllConfirm.disabled = false;
+      btnTagAllConfirm.textContent = `Add "${chip.dataset.tag}" to ${displayList.length} image${displayList.length !== 1 ? 's' : ''}`;
+      renderTagAllChips(tagAllInput.value);
+    });
+  });
+}
+
+tagAllInput.addEventListener('input', () => {
+  const val = tagAllInput.value.trim();
+  btnTagAllConfirm.disabled = !val;
+  if (val) btnTagAllConfirm.textContent = `Add "${val}" to ${displayList.length} image${displayList.length !== 1 ? 's' : ''}`;
+  else btnTagAllConfirm.textContent = 'Add tag';
+  renderTagAllChips(val);
+});
+
+tagAllInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !btnTagAllConfirm.disabled) btnTagAllConfirm.click();
+  if (e.key === 'Escape') closeTagAllModal();
+});
+
+document.getElementById('btn-tag-all-cancel').addEventListener('click', closeTagAllModal);
+modalTagAll.addEventListener('click', (e) => { if (e.target === modalTagAll) closeTagAllModal(); });
+
+function closeTagAllModal() { modalTagAll.classList.add('hidden'); }
+
+btnTagAllConfirm.addEventListener('click', async () => {
+  const tag = tagAllInput.value.trim().toLowerCase();
+  if (!tag) return;
+
+  const images = displayList.map(img => ({ category: img.category, filename: img.filename }));
+  btnTagAllConfirm.disabled = true;
+  btnTagAllConfirm.textContent = 'Applying…';
+
+  try {
+    const result = await api.batchAddTag(images, tag);
+    closeTagAllModal();
+    showToast(result.message, 'success');
+    // Refresh tags data so sidebar counts update
+    allTagsData = await api.getAllTags().catch(() => allTagsData);
+    buildTagSidebar();
   } catch (err) {
-    showToast('Failed to load categories: ' + err.message, 'error');
+    showToast(err.message, 'error');
+    btnTagAllConfirm.disabled = false;
+    btnTagAllConfirm.textContent = `Add "${tag}" to ${displayList.length} image${displayList.length !== 1 ? 's' : ''}`;
   }
 });
 

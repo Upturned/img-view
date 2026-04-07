@@ -43,6 +43,8 @@ const api = {
     }),
   deleteImageTags: (category, filename) =>
     apiFetch(`/api/tags/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`, { method: 'DELETE' }),
+  batchAddTag: (images, tag) =>
+    apiFetch('/api/tags/batch-add', { method: 'POST', body: JSON.stringify({ images, tag }) }),
 
   // --- Favorites ---
   getFavorites: () => apiFetch('/api/favorites'),
