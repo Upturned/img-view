@@ -7,7 +7,7 @@ cd /d "%~dp0"
 ::   2. Set the PORT environment variable before running this file
 ::      e.g.  set PORT=4000  &&  launch.bat
 :: ─────────────────────────────────────────────────────────────────────────────
-if "%PORT%"=="" set PORT=2080
+set PORT=2080
 
 echo.
 echo  img-view — starting on port %PORT%
