@@ -10,12 +10,14 @@ const catsEmpty      = document.getElementById('categories-empty');
 const catsTitle      = document.getElementById('categories-title');
 const btnFavorites   = document.getElementById('btn-favorites');
 
-let activeTags    = new Set();
+let activeTags    = [];           // managed by tagSidebar
 let favoritesMode = false;
 let favoritesData = {};           // { "category/filename": true }
-let allTagsData   = [];           // [{ tag, count }] from server
-let tagSortMode   = 'name';       // 'name' | 'count'
-let tagSearchQuery = '';
+
+const tagSidebar = createTagSidebar({
+  type: 'image',
+  onFilterChange: (tags) => { activeTags = tags; onTagsChanged(); },
+});
 
 // --- Theme toggle ---
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
@@ -45,8 +47,7 @@ function enterFavoritesMode() {
   btnFavorites.classList.remove('btn-ghost');
   searchInput.value = '';
   searchClear.classList.add('hidden');
-  activeTags.clear();
-  updateTagSidebarActiveStates();
+  tagSidebar.clear();
   showFavoritesSection();
 }
 
@@ -93,98 +94,10 @@ async function showFavoritesSection() {
   }
 }
 
-// --- Tag sidebar ---
-async function buildTagSidebar() {
-  try {
-    allTagsData = await api.getUniqueTags();
-  } catch {
-    allTagsData = [];
-  }
-  renderTagSidebar();
-}
-
-function renderTagSidebar() {
-  const list     = document.getElementById('tag-sidebar-list');
-  const clearBtn = document.getElementById('btn-clear-tags');
-
-  let items = [...allTagsData];
-
-  // Apply search filter
-  if (tagSearchQuery) {
-    items = items.filter(({ tag }) => tag.includes(tagSearchQuery));
-  }
-
-  // Apply sort
-  if (tagSortMode === 'count') {
-    items.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
-  } else {
-    items.sort((a, b) => a.tag.localeCompare(b.tag));
-  }
-
-  if (items.length === 0) {
-    list.innerHTML = '<span class="tag-sidebar-empty">No tags yet.</span>';
-    clearBtn.classList.add('hidden');
-    return;
-  }
-
-  list.innerHTML = items.map(({ tag, count }) =>
-    `<button class="tag-chip${activeTags.has(tag) ? ' active' : ''}" data-tag="${escHtml(tag)}">
-      <span class="tag-chip-label">${escHtml(tag)}</span>
-      <span class="tag-count">${count}</span>
-    </button>`
-  ).join('');
-
-  list.querySelectorAll('.tag-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const tag = chip.dataset.tag;
-      if (activeTags.has(tag)) { activeTags.delete(tag); chip.classList.remove('active'); }
-      else                     { activeTags.add(tag);    chip.classList.add('active'); }
-      clearBtn.classList.toggle('hidden', activeTags.size === 0);
-      if (favoritesMode) exitFavoritesMode();
-      onTagsChanged();
-    });
-  });
-
-  clearBtn.classList.toggle('hidden', activeTags.size === 0);
-}
-
-function updateTagSidebarActiveStates() {
-  document.querySelectorAll('#tag-sidebar-list .tag-chip').forEach(chip => {
-    chip.classList.toggle('active', activeTags.has(chip.dataset.tag));
-  });
-  document.getElementById('btn-clear-tags').classList.toggle('hidden', activeTags.size === 0);
-}
-
-// Tag sidebar: search input
-document.getElementById('tag-sidebar-search').addEventListener('input', (e) => {
-  tagSearchQuery = e.target.value.trim().toLowerCase();
-  renderTagSidebar();
-});
-
-// Tag sidebar: sort buttons
-document.getElementById('tag-sort-name').addEventListener('click', () => {
-  tagSortMode = 'name';
-  document.getElementById('tag-sort-name').classList.add('active');
-  document.getElementById('tag-sort-count').classList.remove('active');
-  renderTagSidebar();
-});
-
-document.getElementById('tag-sort-count').addEventListener('click', () => {
-  tagSortMode = 'count';
-  document.getElementById('tag-sort-count').classList.add('active');
-  document.getElementById('tag-sort-name').classList.remove('active');
-  renderTagSidebar();
-});
-
-document.getElementById('btn-clear-tags').addEventListener('click', () => {
-  activeTags.clear();
-  updateTagSidebarActiveStates();
-  onTagsChanged();
-});
 
 function onTagsChanged() {
   const raw = searchInput.value.trim();
-  if (raw.length === 0 && activeTags.size === 0) {
+  if (raw.length === 0 && activeTags.length === 0) {
     showCategories();
     return;
   }
@@ -273,7 +186,7 @@ searchInput.addEventListener('input', () => {
   if (favoritesMode) exitFavoritesMode();
 
   clearTimeout(searchDebounce);
-  if (raw.length === 0 && activeTags.size === 0) {
+  if (raw.length === 0 && activeTags.length === 0) {
     showCategories();
     return;
   }
@@ -283,7 +196,7 @@ searchInput.addEventListener('input', () => {
 searchClear.addEventListener('click', () => {
   searchInput.value = '';
   searchClear.classList.add('hidden');
-  if (activeTags.size === 0) showCategories();
+  if (activeTags.length === 0) showCategories();
   else runSearch('');
   searchInput.focus();
 });
@@ -516,7 +429,7 @@ async function init() {
   favoritesData = await api.getFavorites().catch(() => ({}));
   loadCategories();
   checkLooseFiles();
-  buildTagSidebar();
+  tagSidebar.init();
 }
 
 init();

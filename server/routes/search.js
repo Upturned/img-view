@@ -4,11 +4,11 @@ const path = require('path');
 const router = express.Router();
 const scanner = require('../utils/scanner');
 
-const TAGS_PATH = path.join(__dirname, '../../data/tags.json');
+const TAGS_IMAGES_PATH = path.join(__dirname, '../../data/tags-images.json');
 
 function loadTags() {
   try {
-    return JSON.parse(fs.readFileSync(TAGS_PATH, 'utf8'));
+    return JSON.parse(fs.readFileSync(TAGS_IMAGES_PATH, 'utf8'));
   } catch {
     return {};
   }

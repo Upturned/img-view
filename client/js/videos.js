@@ -1,7 +1,11 @@
 // Videos page — category list + video grid within a category
 
 let currentCategory = null;
-let sortOrder = 'asc';
+let sortOrder       = 'asc';
+let activeTags      = [];         // managed by tagSidebar
+let allCategories   = [];
+let allVideos       = [];
+let videoTagsMap    = {};         // { "category/filename": [tags] } — full map for client-side filtering
 
 const sectionCats   = document.getElementById('section-categories');
 const sectionVideos = document.getElementById('section-videos');
@@ -18,7 +22,44 @@ const searchClear   = document.getElementById('search-clear');
 
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
 
-// Global random video
+const tagSidebar = createTagSidebar({
+  type: 'video',
+  onFilterChange: (tags) => { activeTags = tags; applyFilter(); },
+});
+
+// ── Filter ──
+function applyFilter() {
+  if (!sectionVideos.classList.contains('hidden')) {
+    renderVideoGrid(getFilteredVideos());
+  } else {
+    renderCategoryGrid(getFilteredCategories());
+  }
+}
+
+function getFilteredCategories() {
+  let cats = [...allCategories];
+  const q = searchInput.value.trim().toLowerCase();
+  if (q) cats = cats.filter(c => c.name.toLowerCase().includes(q));
+  if (activeTags.length > 0) {
+    cats = cats.filter(cat =>
+      Object.entries(videoTagsMap).some(([key, tags]) =>
+        key.startsWith(cat.name + '/') && activeTags.every(t => tags.includes(t))
+      )
+    );
+  }
+  return cats;
+}
+
+function getFilteredVideos() {
+  if (activeTags.length === 0) return allVideos;
+  return allVideos.filter(v => {
+    const key = `${v.category}/${v.filename}`;
+    const tags = videoTagsMap[key] || [];
+    return activeTags.every(t => tags.includes(t));
+  });
+}
+
+// ── Global random video ──
 document.getElementById('btn-random-global-video').addEventListener('click', async () => {
   try {
     const v = await api.getRandomVideo();
@@ -33,34 +74,34 @@ document.getElementById('btn-random-global-video').addEventListener('click', asy
 // ── Load categories ──
 async function loadCategories() {
   try {
-    let categories = await api.getVideoCategories();
-
-    const q = searchInput.value.trim().toLowerCase();
-    if (q) categories = categories.filter(c => c.name.toLowerCase().includes(q));
-
-    catsTitle.textContent = `Video Categories (${categories.length})`;
-
-    if (categories.length === 0) {
-      catsEmpty.classList.remove('hidden');
-      catsGrid.innerHTML = '';
-      return;
-    }
-
-    catsEmpty.classList.add('hidden');
-    catsGrid.innerHTML = categories.map(cat => categoryCard(cat)).join('');
-
-    catsGrid.querySelectorAll('.card').forEach((card, i) => {
-      card.addEventListener('click', () => openCategory(categories[i].name));
-      card.addEventListener('keydown', e => { if (e.key === 'Enter') openCategory(categories[i].name); });
-      contextMenu.on(card, () => [
-        { icon: '🎬', label: 'Open category',    action: () => openCategory(categories[i].name) },
-        { label: '---' },
-        { icon: '➕', label: 'Add video from…', action: () => ctxAddFile('video', categories[i].name, () => loadCategories()) },
-      ]);
-    });
+    allCategories = await api.getVideoCategories();
+    renderCategoryGrid(getFilteredCategories());
   } catch (err) {
     showToast('Failed to load categories.', 'error');
   }
+}
+
+function renderCategoryGrid(categories) {
+  catsTitle.textContent = `Video Categories (${categories.length})`;
+
+  if (categories.length === 0) {
+    catsEmpty.classList.remove('hidden');
+    catsGrid.innerHTML = '';
+    return;
+  }
+
+  catsEmpty.classList.add('hidden');
+  catsGrid.innerHTML = categories.map(cat => categoryCard(cat)).join('');
+
+  catsGrid.querySelectorAll('.card').forEach((card, i) => {
+    card.addEventListener('click', () => openCategory(categories[i].name));
+    card.addEventListener('keydown', e => { if (e.key === 'Enter') openCategory(categories[i].name); });
+    contextMenu.on(card, () => [
+      { icon: '🎬', label: 'Open category',    action: () => openCategory(categories[i].name) },
+      { label: '---' },
+      { icon: '➕', label: 'Add video from…', action: () => ctxAddFile('video', categories[i].name, () => loadCategories()) },
+    ]);
+  });
 }
 
 function categoryCard(cat) {
@@ -80,10 +121,8 @@ function categoryCard(cat) {
 async function openCategory(name) {
   currentCategory = name;
   document.getElementById('breadcrumb-cat-name').textContent = name;
-
   sectionCats.classList.add('hidden');
   sectionVideos.classList.remove('hidden');
-
   await loadVideos();
 }
 
@@ -91,52 +130,49 @@ async function openCategory(name) {
 async function loadVideos() {
   if (!currentCategory) return;
   try {
-    let videos = await api.getVideos(currentCategory, {
+    allVideos = await api.getVideos(currentCategory, {
       sort: sortSelect.value,
       order: sortOrder,
     });
-
-    videoCount.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
-
-    if (videos.length === 0) {
-      videoEmpty.classList.remove('hidden');
-      videoGrid.innerHTML = '';
-      return;
-    }
-
-    videoEmpty.classList.add('hidden');
-    videoGrid.innerHTML = videos.map(v => videoCard(v)).join('');
-
-    // Lazy video preview: load first frame via <video> seek
-    videoGrid.querySelectorAll('.video-thumb').forEach(vid => {
-      vid.addEventListener('loadeddata', () => vid.classList.add('loaded'), { once: true });
-    });
-
-    videoGrid.querySelectorAll('.card').forEach((card, i) => {
-      card.addEventListener('click', () => openVideo(videos, i));
-      card.addEventListener('keydown', e => { if (e.key === 'Enter') openVideo(videos, i); });
-      contextMenu.on(card, () => {
-        const v = videos[i];
-        return [
-          { icon: '▶',  label: 'Play',        action: () => openVideo(videos, i) },
-          { label: '---' },
-          { icon: '✏️', label: 'Rename',       action: () => ctxRename(v.category, v.filename, 'video', (newName) => {
-              videos[i] = { ...v, filename: newName, name: newName.slice(0, newName.lastIndexOf('.')) };
-              loadVideos();
-            })
-          },
-          { label: '---' },
-          { icon: '➕', label: 'Add video from…', action: () => ctxAddFile('video', v.category, () => loadVideos()) },
-        ];
-      });
-    });
-
-    // Store list for player navigation
-    sessionStorage.setItem('videoList', JSON.stringify(videos));
-    sessionStorage.setItem('videoListMeta', JSON.stringify({ category: currentCategory }));
+    renderVideoGrid(getFilteredVideos());
   } catch (err) {
     showToast('Failed to load videos: ' + err.message, 'error');
   }
+}
+
+function renderVideoGrid(videos) {
+  videoCount.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
+
+  if (videos.length === 0) {
+    videoEmpty.classList.remove('hidden');
+    videoGrid.innerHTML = '';
+    return;
+  }
+
+  videoEmpty.classList.add('hidden');
+  videoGrid.innerHTML = videos.map(v => videoCard(v)).join('');
+
+  videoGrid.querySelectorAll('.video-thumb').forEach(vid => {
+    vid.addEventListener('loadeddata', () => vid.classList.add('loaded'), { once: true });
+  });
+
+  videoGrid.querySelectorAll('.card').forEach((card, i) => {
+    card.addEventListener('click', () => openVideo(videos, i));
+    card.addEventListener('keydown', e => { if (e.key === 'Enter') openVideo(videos, i); });
+    contextMenu.on(card, () => {
+      const v = videos[i];
+      return [
+        { icon: '▶',  label: 'Play',             action: () => openVideo(videos, i) },
+        { label: '---' },
+        { icon: '✏️', label: 'Rename',            action: () => ctxRename(v.category, v.filename, 'video', () => loadVideos()) },
+        { label: '---' },
+        { icon: '➕', label: 'Add video from…',  action: () => ctxAddFile('video', v.category, () => loadVideos()) },
+      ];
+    });
+  });
+
+  sessionStorage.setItem('videoList', JSON.stringify(videos));
+  sessionStorage.setItem('videoListMeta', JSON.stringify({ category: currentCategory }));
 }
 
 function videoCard(v) {
@@ -163,16 +199,17 @@ function openVideo(videos, index) {
 document.getElementById('breadcrumb-home-link').addEventListener('click', (e) => {
   e.preventDefault();
   currentCategory = null;
+  allVideos = [];
   sectionVideos.classList.add('hidden');
   sectionCats.classList.remove('hidden');
+  renderCategoryGrid(getFilteredCategories());
 });
 
 // ── Random (category) ──
 document.getElementById('btn-random-cat-video').addEventListener('click', async () => {
   if (!currentCategory) return;
-  const exclude = undefined;
   try {
-    const v = await api.getRandomVideo({ category: currentCategory, exclude });
+    const v = await api.getRandomVideo({ category: currentCategory });
     goTo('video', { category: v.category, filename: v.filename });
   } catch {
     showToast('No videos available.', 'error');
@@ -193,19 +230,25 @@ searchInput.addEventListener('input', () => {
   const q = searchInput.value.trim();
   searchClear.classList.toggle('hidden', !q);
   clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(loadCategories, 180);
+  searchDebounce = setTimeout(() => {
+    if (sectionVideos.classList.contains('hidden')) {
+      renderCategoryGrid(getFilteredCategories());
+    }
+  }, 180);
 });
 
 searchClear.addEventListener('click', () => {
   searchInput.value = '';
   searchClear.classList.add('hidden');
-  loadCategories();
+  if (sectionVideos.classList.contains('hidden')) {
+    renderCategoryGrid(getFilteredCategories());
+  }
   searchInput.focus();
 });
 
 // ── New category modal ──
-const modal         = document.getElementById('modal-new-category');
-const inputCatName  = document.getElementById('input-category-name');
+const modal        = document.getElementById('modal-new-category');
+const inputCatName = document.getElementById('input-category-name');
 
 document.getElementById('btn-new-category').addEventListener('click', () => {
   inputCatName.value = '';
@@ -240,4 +283,10 @@ function escHtml(str) {
 }
 
 // ── Init ──
-loadCategories();
+async function init() {
+  try { videoTagsMap = await api.getAllTags('video'); } catch { videoTagsMap = {}; }
+  tagSidebar.init();
+  loadCategories();
+}
+
+init();

@@ -28,23 +28,25 @@ const api = {
   },
 
   // --- Tags ---
-  getAllTags: () => apiFetch('/api/tags'),
+  // type: 'image' (default) | 'video'
+  getAllTags: (type = 'image') => apiFetch(`/api/tags?type=${type}`),
   // Returns [{ tag, count }] sorted by name. Optional category scopes counts to that category.
-  getUniqueTags: (category) => {
-    const q = category ? '?' + new URLSearchParams({ category }) : '';
-    return apiFetch(`/api/tags/all${q}`);
+  getUniqueTags: (category, type = 'image') => {
+    const params = new URLSearchParams({ type });
+    if (category) params.set('category', category);
+    return apiFetch(`/api/tags/all?${params}`);
   },
-  getImageTags: (category, filename) =>
-    apiFetch(`/api/tags/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`),
-  setImageTags: (category, filename, tags) =>
-    apiFetch(`/api/tags/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`, {
+  getImageTags: (category, filename, type = 'image') =>
+    apiFetch(`/api/tags/${encodeURIComponent(category)}/${encodeURIComponent(filename)}?type=${type}`),
+  setImageTags: (category, filename, tags, type = 'image') =>
+    apiFetch(`/api/tags/${encodeURIComponent(category)}/${encodeURIComponent(filename)}?type=${type}`, {
       method: 'POST',
       body: JSON.stringify({ tags }),
     }),
-  deleteImageTags: (category, filename) =>
-    apiFetch(`/api/tags/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`, { method: 'DELETE' }),
-  batchAddTag: (images, tag) =>
-    apiFetch('/api/tags/batch-add', { method: 'POST', body: JSON.stringify({ images, tag }) }),
+  deleteImageTags: (category, filename, type = 'image') =>
+    apiFetch(`/api/tags/${encodeURIComponent(category)}/${encodeURIComponent(filename)}?type=${type}`, { method: 'DELETE' }),
+  batchAddTag: (images, tag, type = 'image') =>
+    apiFetch('/api/tags/batch-add', { method: 'POST', body: JSON.stringify({ images, tag, type }) }),
 
   // --- Favorites ---
   getFavorites: () => apiFetch('/api/favorites'),

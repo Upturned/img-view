@@ -142,7 +142,7 @@ document.getElementById('btn-tags-toggle').addEventListener('click', () => {
 
 async function loadTags(category, filename) {
   try {
-    currentTags = await api.getImageTags(category, filename);
+    currentTags = await api.getImageTags(category, filename, 'video');
     renderTags();
   } catch {
     currentTags = [];
@@ -164,7 +164,7 @@ function renderTags() {
 async function saveTagsToServer() {
   const v = videoList[currentIndex];
   if (!v) return;
-  try { await api.setImageTags(v.category, v.filename, currentTags); }
+  try { await api.setImageTags(v.category, v.filename, currentTags, 'video'); }
   catch (err) { showToast('Failed to save tags: ' + err.message, 'error'); }
 }
 
