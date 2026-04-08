@@ -4,9 +4,11 @@
 const THEMES = {
   minimal: '/css/theme-minimal.css',
   modern:  '/css/theme-modern.css',
+  warm:  '/css/theme-warm.css',
+  highcontrast:  '/css/theme-highcontrast.css',
 };
 
-const DEFAULT_THEME = 'modern';
+const DEFAULT_THEME = 'minimal';
 
 function getTheme() {
   return localStorage.getItem('theme') || DEFAULT_THEME;
@@ -20,8 +22,9 @@ function setTheme(name) {
 }
 
 function toggleTheme() {
-  const current = getTheme();
-  const next = current === 'minimal' ? 'modern' : 'minimal';
+  const keys = Object.keys(THEMES);
+  const idx = keys.indexOf(getTheme());
+  const next = keys[(idx + 1) % keys.length];
   setTheme(next);
   updateToggleBtn();
 }
@@ -29,9 +32,7 @@ function toggleTheme() {
 function updateToggleBtn() {
   const btn = document.getElementById('theme-toggle-btn');
   if (!btn) return;
-  const current = getTheme();
-  btn.title = current === 'minimal' ? 'Switch to Modern theme' : 'Switch to Minimal theme';
-  btn.textContent = current === 'minimal' ? '✦' : '◈';
+  btn.title = `Current theme: ${getTheme()}`;
 }
 
 // Apply theme immediately on load (avoids flash)

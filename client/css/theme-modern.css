@@ -3,6 +3,8 @@
    Soft glows, rounded corners, vibrant accent, visual depth.
    ============================================================ */
 
+#theme-toggle-btn::before { content: '◈'; }
+
 :root {
   /* Fonts */
   --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
