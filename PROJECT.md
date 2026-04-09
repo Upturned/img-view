@@ -1,26 +1,33 @@
-# Image Visualizer — Project Documentation
+# img-view — Project Documentation
 
 ## Overview
 
-A local image (and video) visualizer running as a Node.js server with a plain HTML/CSS/JS frontend.
-Designed for offline use only. No internet connection required at runtime.
+A local image and video manager running as a Node.js + Express server with a plain HTML/CSS/JS frontend.
+Designed for offline, desktop-only use. No internet connection required at runtime. No build step.
 
 ---
 
-## Requirements Summary (Interview)
+## Requirements
 
 ### File Handling
-- The app automatically reads the `/images` and `/videos` folders on startup — no manual folder selection.
+- Automatically reads `/images` and `/videos` folders — no manual folder selection.
 - Categories are subfolders inside `/images` and `/videos`.
-- Users can create new categories (folders) from within the app.
-- Images and tags are managed through the app UI; files are managed manually through the filesystem.
+- Users can create new categories from the UI.
+- Loose files (in root, not in a subfolder) can be auto-organized into appropriate categories.
+- Deep organize: scans inside categories for misplaced file types.
+- Windows file picker for manually adding files to a category.
+- Move, copy, rename (single and bulk) between categories.
+- Recycle bin: moves files to a hidden folder; restore or delete permanently from UI.
 
 ### Themes & UI
-- Desktop only (no mobile/responsive requirement).
-- Two dark themes:
+- Desktop only — no mobile/responsive requirement.
+- Four themes:
+  - **Modern** — dark, card-based (default)
   - **Minimal** — clean, lots of whitespace, simple typography
-  - **Modern** — richer card-based design
-- Theme switcher available in the UI.
+  - **Warm** — warm-toned variant
+  - **High Contrast** — accessibility-focused
+- Theme switcher in navbar cycles through all four; persists via localStorage.
+- Theme CSS injected before DOM load to prevent flash of unstyled content.
 
 ### Supported Formats
 - Images: JPG, JPEG, PNG, GIF (animated), WebP, SVG, AVIF
@@ -29,50 +36,70 @@ Designed for offline use only. No internet connection required at runtime.
 
 ### Search
 - Search by file name, folder name, and tags.
-- Tags are stored in a local `data/tags.json` file (no external database).
-- Tags can be added/edited from the image view page.
-- Search works across categories.
+- `#tagname` syntax in search bar for inline tag filtering.
+- Cross-category search results with Images and Categories tabs.
+- Tag filtering uses AND logic for multiple tags.
+
+### Tags
+- Stored separately: `data/tags-images.json` and `data/tags-videos.json`.
+- Key format: `"category/filename": ["tag1", "tag2"]`.
+- Add, remove, and search tags inline in the image/video viewer.
+- Batch-add: apply one tag to multiple files at once.
+- Tag sidebar on home, category, videos, and search pages — search chips, sort by name or count, count badges.
 
 ### Sorting & Filtering (Category Page)
-- Sort by: name, date modified, random
-- Filter by: tags
-- Adjustable card/thumbnail size (affects columns per row)
+- Sort by: name, date modified, random; ascending or descending.
+- Filter by: favorites, tags (AND), filename text — all filters stack.
+- Adjustable column count (2–10); persists via localStorage.
 
-### Image View Page
-- Default display: natural size, unless larger than viewport (then fit-to-screen).
-- Manual zoom via scroll wheel.
-- Pan/drag when image is zoomed beyond screen bounds.
-- Next / Previous navigation following the current sort order.
+### Favorites
+- Toggle star on any image; persists in `data/favorites.json`.
+- Favorites filter on home page and category toolbar.
+- Star badge (★) on favorited cards.
+- Favorited images are protected from accidental recycling.
+
+### Image Viewer
+- Default: natural size, fit-to-screen if image exceeds viewport.
+- Zoom 0.1×–10× via scroll wheel; click-drag to pan.
+- Viewport-constrained pan — no empty space shown.
+- Prev/Next navigation following current sort order.
 - Keyboard shortcuts:
   - `←` / `→` — previous / next image
   - `Backspace` — go back
   - `R` — random image
   - `F` — fullscreen
-  - `Esc` — exit fullscreen / go back
-- Tag editing directly on this page.
-- "Open With" button — triggers Windows native Open With dialog.
-
-### Random Image
-- Central feature of the app.
-- Three modes:
-  - Random from all images
-  - Random from a specific category
-  - Random from a specific tag
-
-### Slideshow
-- Available on the image view page.
-- Configurable interval (user-settable time between slides).
+  - `+` / `-` — zoom in / out
+  - `0` — reset zoom
+  - `Esc` — exit fullscreen / stop slideshow
+- Slideshow mode: configurable interval (1–30 s), animated progress bar.
+- Inline tag editing, Open With button (Windows native dialog).
 
 ### Video Section
-- Separate from the image section.
-- Same category structure (`/videos` folder with subfolders).
-- Simple built-in video player using the browser's native `<video>` element.
+- Separate from image section; same category structure under `/videos`.
+- Native HTML5 `<video>` player with prev/next navigation.
+- Auto-advance to next video on playback end.
+- Sidebar with clickable video list thumbnails.
+- Tag support and Open With button.
+- Keyboard shortcuts:
+  - `Space` — play/pause
+  - `←` / `→` — seek ±5 seconds
+  - `↑` / `↓` — volume ±10%
+  - `M` — mute toggle
+  - `F` — fullscreen
+  - `Backspace` — go back
+
+### Random
+- Random image: from all images, a specific category, or a specific tag.
+- Random video: from all videos or a specific category.
+- Exclude current file to avoid repeats.
 
 ### Performance
 - Target: up to ~15,000 images.
-- Thumbnails generated server-side using `sharp`, cached to `/thumbnails`.
-- Thumbnails are only generated once (skipped if already cached).
-- Lazy loading and virtual scrolling on the frontend for large collections.
+- Thumbnails generated server-side via Sharp — 300 px max-width, 80% WebP quality.
+- Cached to `/thumbnails`; only generated once, skipped if cached.
+- Background thumbnail generation at startup (concurrency cap: 8).
+- Lazy loading via IntersectionObserver on all grids.
+- Client-side filtering for instant feedback after data is loaded.
 
 ### Offline
 - 100% offline at runtime. No CDN resources, no external fonts, no network calls.
@@ -80,17 +107,26 @@ Designed for offline use only. No internet connection required at runtime.
 
 ---
 
-## Proposed Architecture
+## Architecture
 
 ### Stack
 
-| Layer      | Choice              | Reason                                              |
-|------------|---------------------|-----------------------------------------------------|
-| Backend    | Node.js + Express   | Local filesystem access, thumbnail gen, open-with   |
-| Frontend   | HTML + CSS + JS     | No build step, no framework overhead                |
-| Thumbnails | `sharp`             | Fast, offline, battle-tested                        |
-| Data       | `tags.json`         | Zero dependencies, human-readable                   |
-| Language   | JavaScript          | No TypeScript build step needed at this scale       |
+| Layer      | Choice            | Reason                                              |
+|------------|-------------------|-----------------------------------------------------|
+| Backend    | Node.js + Express | Local filesystem access, thumbnail gen, open-with   |
+| Frontend   | HTML + CSS + JS   | No build step, no framework overhead                |
+| Thumbnails | `sharp`           | Fast, offline, battle-tested                        |
+| Data       | JSON files        | Zero dependencies, human-readable                   |
+| Language   | JavaScript        | No TypeScript build step needed at this scale       |
+
+### Notable patterns
+- **Stateless server** — no in-memory state; all data lives on disk as JSON + media files.
+- **sessionStorage for navigation** — image/video lists stored in sessionStorage to preserve sort order across page transitions.
+- **Client-side filtering** — server returns sorted list; filters (tags, favorites, name) applied in browser.
+- **Tag sidebar** — reusable `createTagSidebar()` factory used on home, category, videos, and search pages.
+- **Context menu system** — centralized right-click handler with category picker modal for file operations.
+- **Path traversal protection** — all file operations validated with `path.resolve()`.
+- **Hidden categories** — `recycle-bin` folder excluded from UI via `HIDDEN_CATEGORIES` set in `scanner.js`.
 
 ---
 
@@ -99,42 +135,57 @@ Designed for offline use only. No internet connection required at runtime.
 ```
 img-view/
 ├── server/
-│   ├── index.js              # Entry point, Express setup
+│   ├── index.js                    # Express setup, middleware, routes, thumbnail gen at startup
 │   ├── routes/
-│   │   ├── categories.js     # List/create image categories
-│   │   ├── images.js         # List images, serve files
-│   │   ├── videos.js         # List videos, serve files
-│   │   ├── tags.js           # Read/write tags.json
-│   │   ├── search.js         # Search by name/tag
-│   │   ├── random.js         # Random image logic
-│   │   └── open.js           # Windows "Open With"
+│   │   ├── categories.js           # GET/POST image categories; GET with sort/filter
+│   │   ├── videos.js               # GET/POST video categories; GET videos by category
+│   │   ├── tags.js                 # Tag CRUD (individual, batch-add, all-tags with counts)
+│   │   ├── search.js               # Cross-category search by filename + tag
+│   │   ├── random.js               # Random image/video (category/tag/exclude filters)
+│   │   ├── files.js                # Move, copy, rename, organize, pick, cleanup thumbs
+│   │   ├── favorites.js            # Toggle and retrieve favorites
+│   │   ├── recycle.js              # Recycle bin (move, restore, delete permanently)
+│   │   └── open.js                 # Windows "Open With" dialog
 │   └── utils/
-│       ├── scanner.js        # Filesystem scanner
-│       └── thumbnails.js     # Sharp thumbnail generation
+│       ├── scanner.js              # Filesystem scanning (categories, images, videos, loose files)
+│       └── thumbnails.js           # Sharp thumbnail generation and caching
 ├── client/
+│   ├── index.html                  # Redirect to /pages/home.html
 │   ├── pages/
-│   │   ├── home.html
-│   │   ├── category.html
-│   │   ├── image.html
-│   │   ├── videos.html
-│   │   └── video.html
+│   │   ├── home.html               # Category grid, search, favorites, recycle bin modal
+│   │   ├── category.html           # Image grid with sort, filter, size slider
+│   │   ├── image.html              # Image viewer (zoom/pan, nav, slideshow, tags)
+│   │   ├── videos.html             # Video category grid + video list
+│   │   ├── video.html              # Video player with sidebar and tags
+│   │   └── search.html             # Global search results
 │   ├── css/
-│   │   ├── base.css
-│   │   ├── theme-minimal.css
-│   │   └── theme-modern.css
+│   │   ├── base.css                # Reset, layout, shared components
+│   │   ├── theme-modern.css        # Default dark theme
+│   │   ├── theme-minimal.css       # Minimal light theme
+│   │   ├── theme-warm.css          # Warm tones theme
+│   │   └── theme-highcontrast.css  # High contrast theme
 │   └── js/
-│       ├── api.js            # Shared fetch wrapper
-│       ├── home.js
-│       ├── category.js
-│       ├── image.js
-│       ├── video.js
-│       └── search.js
-├── images/                   # Image library (subfolders = categories)
-├── videos/                   # Video library (subfolders = categories)
-├── thumbnails/               # Auto-generated thumbnails (do not commit)
+│       ├── api.js                  # All fetch wrappers + toast notification system
+│       ├── home.js                 # Home page logic
+│       ├── category.js             # Category page (grid, sort, filter, selection, bulk ops)
+│       ├── image.js                # Image viewer (zoom/pan, nav, slideshow, keyboard)
+│       ├── videos.js               # Videos page (category grid + video list)
+│       ├── video.js                # Video player (playback, nav, sidebar, tags, keyboard)
+│       ├── search.js               # Search results page
+│       ├── theme.js                # Theme cycling + localStorage persistence
+│       ├── context-menu.js         # Right-click menu system + category picker modal
+│       ├── tag-sidebar.js          # Reusable tag sidebar component
+│       └── navbar.js               # Navbar buttons
 ├── data/
-│   └── tags.json
+│   ├── favorites.json              # { "category/filename": true }
+│   ├── tags-images.json            # { "category/filename": ["tag1", ...] }
+│   └── tags-videos.json            # Same structure for videos
+├── images/                         # Image library (subfolders = categories; do not commit)
+├── videos/                         # Video library (subfolders = categories; do not commit)
+├── thumbnails/                     # Auto-generated thumbnails (do not commit)
 ├── package.json
+├── package-lock.json
+├── launch.bat                      # Windows launcher (start server + open browser)
 └── .gitignore
 ```
 
@@ -142,36 +193,78 @@ img-view/
 
 ## API Surface
 
-| Method | Endpoint                          | Description                          |
-|--------|-----------------------------------|--------------------------------------|
-| GET    | `/api/categories`                 | List all image categories            |
-| POST   | `/api/categories`                 | Create a new image category          |
-| GET    | `/api/categories/:name`           | Images in a category (sort/filter)   |
-| GET    | `/api/videos/categories`          | List all video categories            |
-| GET    | `/api/videos/:name`               | Videos in a category                 |
-| GET    | `/api/search?q=&type=`            | Search by name or tag                |
-| GET    | `/api/random?category=&tag=`      | Get a random image                   |
-| GET    | `/api/tags`                       | Get all tags                         |
-| POST   | `/api/tags`                       | Update tags for an image             |
-| POST   | `/api/open`                       | Open file with Windows "Open With"   |
-| GET    | `/thumbnails/:category/:file`     | Serve generated thumbnail            |
-| GET    | `/images/:category/:file`         | Serve full-resolution image          |
-| GET    | `/videos/:category/:file`         | Serve video file                     |
+### Categories (Images)
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| GET    | `/api/categories`                     | List all image categories               |
+| POST   | `/api/categories`                     | Create a new image category             |
+| GET    | `/api/categories/:name`               | Images in category (sort/filter/tags)   |
+| POST   | `/api/categories/:name/thumbnails`    | Trigger thumbnail generation            |
 
----
+### Videos
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| GET    | `/api/videos/categories`             | List all video categories               |
+| POST   | `/api/videos/categories`             | Create a new video category             |
+| GET    | `/api/videos/:name`                  | Videos in category (sort/order)         |
 
-## Implementation Plan
+### Tags
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| GET    | `/api/tags?type=image\|video`         | Full tags map                           |
+| GET    | `/api/tags/all?category=&type=`       | Sorted tag list with counts             |
+| GET    | `/api/tags/:category/:filename`       | Tags for one file                       |
+| POST   | `/api/tags/:category/:filename`       | Set tags for one file                   |
+| DELETE | `/api/tags/:category/:filename`       | Clear tags for one file                 |
+| POST   | `/api/tags/batch-add`                 | Add a tag to multiple files             |
 
-| Step | Description                                                                 |
-|------|-----------------------------------------------------------------------------|
-| 1    | Project setup — `package.json`, install Express + sharp, folder scaffold    |
-| 2    | File scanner — reads `/images` and `/videos`, returns structured data       |
-| 3    | Thumbnail generator — Sharp, cached to `/thumbnails`, skips if exists       |
-| 4    | All API routes — categories, images, videos, tags, search, random, open-with|
-| 5    | Base CSS + themes — variables, two dark themes, layout primitives           |
-| 6    | Home page — category cards, search bar, random button                       |
-| 7    | Category page — image grid, sort/filter/size controls, lazy load            |
-| 8    | Image view page — zoom/pan, nav, slideshow, keyboard shortcuts, tags        |
-| 9    | Video section — video categories + simple player page                       |
-| 10   | Search page — cross-category results for name + tag queries                 |
-| 11   | Polish — theme switcher, edge cases, error states                           |
+### Search
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| GET    | `/api/search?q=&tags=&type=`          | Cross-category search by name + tag     |
+
+### Random
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| GET    | `/api/random?category=&tag=&exclude=` | Random image                            |
+| GET    | `/api/random/video?category=&exclude=`| Random video                            |
+
+### Files
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| POST   | `/api/files/move`                     | Move file between categories            |
+| POST   | `/api/files/copy`                     | Copy file between categories            |
+| POST   | `/api/files/move-bulk`                | Move multiple files                     |
+| POST   | `/api/files/copy-bulk`                | Copy multiple files                     |
+| POST   | `/api/files/rename`                   | Rename a file                           |
+| GET    | `/api/files/loose`                    | Detect loose files                      |
+| POST   | `/api/files/organize-loose`           | Organize loose files into categories    |
+| POST   | `/api/files/organize-deep`            | Organize misplaced files inside cats    |
+| POST   | `/api/files/pick`                     | Open Windows file picker                |
+| POST   | `/api/files/cleanup-thumbs`           | Delete stale thumbnails                 |
+
+### Favorites
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| GET    | `/api/favorites`                      | Full favorites map                      |
+| POST   | `/api/favorites/:category/:filename`  | Toggle favorite                         |
+
+### Recycle Bin
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| GET    | `/api/recycle`                        | List files in recycle bin               |
+| POST   | `/api/recycle/:category/:filename`    | Move file to recycle bin                |
+| DELETE | `/api/recycle/:filename`              | Permanently delete from recycle bin     |
+| POST   | `/api/recycle/restore/:filename`      | Restore to loose-images                 |
+
+### Open With
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| POST   | `/api/open`                           | Trigger Windows "Open With" dialog      |
+
+### Static
+| Route                              | Description                              |
+|------------------------------------|------------------------------------------|
+| `/images/:category/:filename`      | Serve full-resolution image              |
+| `/videos/:category/:filename`      | Serve video file                         |
+| `/thumbnails/:category/:filename`  | Serve cached WebP thumbnail              |

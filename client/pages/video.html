@@ -61,6 +61,108 @@
 
     .top-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
 
+    /* ── Tags panel ── */
+    #tags-panel {
+      flex-shrink: 0;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      display: none;
+      flex-direction: column;
+    }
+
+    #tags-panel.open { display: flex; }
+
+    #tags-panel-current {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--border);
+      min-height: 40px;
+    }
+
+    #tags-panel-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    #tags-picker-zone {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      padding: 0.5rem 1rem;
+    }
+
+    #tags-picker-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #tags-picker-search {
+      flex: 1;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-input);
+      color: var(--text-primary);
+      font-size: 0.8rem;
+      padding: 0.28rem 0.6rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #tags-picker-search:focus { border-color: var(--accent); }
+    #tags-picker-search::placeholder { color: var(--text-muted); }
+
+    #tags-picker-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      max-height: 68px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .tag-chip-picker {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.18rem 0.5rem;
+      border-radius: 99px;
+      font-size: 0.73rem;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+      white-space: nowrap;
+    }
+
+    .tag-chip-picker:hover { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--text-muted); }
+
+    .tag-chip-picker.active {
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+      color: var(--accent);
+      border-color: var(--accent);
+      font-weight: 500;
+    }
+
+    #tag-input-new {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-input);
+      color: var(--text-primary);
+      font-size: 0.82rem;
+      padding: 0.28rem 0.6rem;
+      outline: none;
+      width: 200px;
+      transition: border-color 0.2s;
+    }
+
+    #tag-input-new:focus { border-color: var(--accent); }
+    #tag-input-new::placeholder { color: var(--text-muted); }
+
     /* ── Main area ── */
     #main-area {
       flex: 1;
@@ -78,12 +180,26 @@
       min-width: 0;
     }
 
-    #main-video {
+    /* ── Video container (zoom/pan viewport) ── */
+    #video-container {
       flex: 1;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+    }
+
+    #video-container.panning  { cursor: grab; }
+    #video-container.dragging { cursor: grabbing; }
+
+    #main-video {
       width: 100%;
       height: 100%;
       object-fit: contain;
       background: #000;
+      transform-origin: center center;
     }
 
     /* ── Nav arrows ── */
@@ -114,6 +230,81 @@
     #btn-prev { left: 0.75rem; }
     #btn-next { right: 0.75rem; }
 
+    /* ── Zoom controls ── */
+    #zoom-controls {
+      position: absolute;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(0,0,0,0.5);
+      border-radius: 99px;
+      padding: 0.3rem 0.7rem;
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 6;
+    }
+
+    #video-panel:hover #zoom-controls { opacity: 1; }
+
+    .zoom-btn {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: transparent;
+      color: rgba(255,255,255,0.8);
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .zoom-btn:hover { background: rgba(255,255,255,0.15); }
+
+    #zoom-label {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.7);
+      min-width: 42px;
+      text-align: center;
+    }
+
+    /* ── Action controls (recycle) ── */
+    #action-controls {
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(0,0,0,0.5);
+      border-radius: 99px;
+      padding: 0.3rem 0.7rem;
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 6;
+    }
+
+    #video-panel:hover #action-controls { opacity: 1; }
+
+    .action-btn {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: transparent;
+      color: rgba(255,255,255,0.7);
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .action-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    #btn-recycle:hover { color: #f87171; }
+
     /* ── Sidebar ── */
     #sidebar {
       width: 260px;
@@ -136,10 +327,7 @@
       flex-shrink: 0;
     }
 
-    #sidebar-list {
-      flex: 1;
-      overflow-y: auto;
-    }
+    #sidebar-list { flex: 1; overflow-y: auto; }
 
     .sidebar-item {
       display: flex;
@@ -167,19 +355,6 @@
       flex-shrink: 0;
     }
 
-    .sidebar-thumb-placeholder {
-      width: 64px;
-      height: 40px;
-      background: var(--bg-primary);
-      border-radius: 3px;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.1rem;
-      color: var(--text-muted);
-    }
-
     .sidebar-name {
       font-size: 0.8rem;
       color: var(--text-secondary);
@@ -190,11 +365,7 @@
 
     .sidebar-item.active .sidebar-name { color: var(--text-primary); font-weight: 500; }
 
-    /* ── Sidebar toggle ── */
-    #btn-sidebar-toggle {
-      font-size: 0.8rem;
-    }
-
+    #btn-sidebar-toggle { font-size: 0.8rem; }
     #sidebar.collapsed { display: none; }
   </style>
 </head>
@@ -226,11 +397,18 @@
   </div>
 
   <!-- Tags panel -->
-  <div id="tags-panel" style="flex-shrink:0;background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:0.6rem 1rem;display:none;">
-    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-      <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">Tags:</span>
+  <div id="tags-panel">
+    <div id="tags-panel-current">
+      <span id="tags-panel-label">Tags:</span>
       <div class="tags" id="tags-display"></div>
-      <div class="tag-input-wrapper"><input type="text" id="tag-input" placeholder="Add tag…" autocomplete="off" /></div>
+    </div>
+    <div id="tags-picker-zone">
+      <div id="tags-picker-header">
+        <input type="text" id="tags-picker-search" placeholder="Search tags…" autocomplete="off" />
+        <button class="btn btn-ghost btn-sm" id="btn-add-new-tag">+ New tag</button>
+      </div>
+      <div id="tags-picker-row"></div>
+      <input type="text" id="tag-input-new" class="hidden" placeholder="New tag… (Enter to add)" autocomplete="off" />
     </div>
   </div>
 
@@ -239,12 +417,30 @@
 
     <!-- Video panel -->
     <div id="video-panel">
-      <video id="main-video" controls autoplay>
-        Your browser does not support the video element.
-      </video>
+
+      <!-- Video container (zoom/pan viewport) -->
+      <div id="video-container">
+        <video id="main-video" controls autoplay>
+          Your browser does not support the video element.
+        </video>
+      </div>
 
       <button class="nav-arrow" id="btn-prev" title="Previous (←)">‹</button>
       <button class="nav-arrow" id="btn-next" title="Next (→)">›</button>
+
+      <!-- Zoom controls -->
+      <div id="zoom-controls">
+        <button class="zoom-btn" id="btn-zoom-out" title="Zoom out (-)">−</button>
+        <span id="zoom-label">100%</span>
+        <button class="zoom-btn" id="btn-zoom-in" title="Zoom in (+)">+</button>
+        <button class="zoom-btn" id="btn-zoom-reset" title="Reset zoom (0)">⌂</button>
+      </div>
+
+      <!-- Action controls -->
+      <div id="action-controls">
+        <button class="action-btn" id="btn-recycle" title="Move to recycle bin">🗑</button>
+      </div>
+
     </div>
 
     <!-- Sidebar: video list -->
@@ -259,6 +455,7 @@
 <script src="/js/theme.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/context-menu.js"></script>
+<script src="/js/tag-picker.js"></script>
 <script src="/js/video.js"></script>
 <script src="/js/navbar.js"></script>
 

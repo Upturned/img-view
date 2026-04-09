@@ -6,7 +6,9 @@ const { thumbPath } = require('../utils/thumbnails');
 const scanner = require('../utils/scanner');
 
 const IMAGES_DIR = scanner.getImagesDir();
-const RECYCLE_DIR = path.join(IMAGES_DIR, 'recycle-bin');
+const VIDEOS_DIR = scanner.getVideosDir();
+const IMAGE_RECYCLE_DIR = path.join(IMAGES_DIR, 'recycle-bin');
+const VIDEO_RECYCLE_DIR = path.join(VIDEOS_DIR, 'recycle-bin');
 const FAVORITES_PATH = path.join(__dirname, '../../data/favorites.json');
 
 function loadFavorites() {
@@ -28,48 +30,60 @@ function uniqueDest(destPath) {
 }
 
 // POST /api/recycle/restore/:filename — must be declared before /:category/:filename
-// Moves a file from the recycle bin back to loose-images/
 router.post('/restore/:filename', (req, res) => {
+  const type = req.query.type === 'video' ? 'video' : 'image';
   const filename = path.basename(req.params.filename);
-  const src = path.join(RECYCLE_DIR, filename);
+  const recycleDir = type === 'video' ? VIDEO_RECYCLE_DIR : IMAGE_RECYCLE_DIR;
+  const src = path.join(recycleDir, filename);
   if (!fs.existsSync(src)) return res.status(404).json({ error: 'File not found in recycle bin.' });
 
-  const looseDir = path.join(IMAGES_DIR, 'loose-images');
+  const looseDir = type === 'video'
+    ? path.join(VIDEOS_DIR, 'loose-videos')
+    : path.join(IMAGES_DIR, 'loose-images');
   ensureDir(looseDir);
   const dest = uniqueDest(path.join(looseDir, filename));
 
   try {
     fs.renameSync(src, dest);
-    res.json({ message: 'Restored to loose-images.', filename: path.basename(dest) });
+    const target = type === 'video' ? 'loose-videos' : 'loose-images';
+    res.json({ message: `Restored to ${target}.`, filename: path.basename(dest) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // POST /api/recycle/:category/:filename
-// Moves an image to the recycle bin. Rejects if the image is favorited.
 router.post('/:category/:filename', (req, res) => {
+  const type = req.query.type === 'video' ? 'video' : 'image';
   const { category, filename } = req.params;
   const key = `${category}/${filename}`;
 
-  const favorites = loadFavorites();
-  if (favorites[key]) {
-    return res.status(409).json({ error: 'Cannot recycle a favorited image. Remove the favorite first.' });
+  // Only check favorites for images (videos don't have favorites yet)
+  if (type === 'image') {
+    const favorites = loadFavorites();
+    if (favorites[key]) {
+      return res.status(409).json({ error: 'Cannot recycle a favorited image. Remove the favorite first.' });
+    }
   }
 
-  const src = path.join(IMAGES_DIR, category, filename);
+  const sourceDir  = type === 'video' ? VIDEOS_DIR : IMAGES_DIR;
+  const recycleDir = type === 'video' ? VIDEO_RECYCLE_DIR : IMAGE_RECYCLE_DIR;
+  const src = path.join(sourceDir, category, filename);
+
   if (!fs.existsSync(src)) return res.status(404).json({ error: 'File not found.' });
 
-  ensureDir(RECYCLE_DIR);
-  const dest = uniqueDest(path.join(RECYCLE_DIR, path.basename(filename)));
+  ensureDir(recycleDir);
+  const dest = uniqueDest(path.join(recycleDir, path.basename(filename)));
 
   try {
     fs.renameSync(src, dest);
 
-    // Remove thumbnail — recycled images don't need it
-    const oldThumb = thumbPath(category, filename);
-    if (fs.existsSync(oldThumb)) {
-      try { fs.unlinkSync(oldThumb); } catch { /* non-critical */ }
+    // Remove thumbnail for images only
+    if (type === 'image') {
+      const oldThumb = thumbPath(category, filename);
+      if (fs.existsSync(oldThumb)) {
+        try { fs.unlinkSync(oldThumb); } catch { /* non-critical */ }
+      }
     }
 
     res.json({ message: 'Moved to recycle bin.', filename: path.basename(dest) });
@@ -79,17 +93,19 @@ router.post('/:category/:filename', (req, res) => {
 });
 
 // GET /api/recycle
-// Returns list of files in the recycle bin
 router.get('/', (req, res) => {
-  ensureDir(RECYCLE_DIR);
+  const type = req.query.type === 'video' ? 'video' : 'image';
+  const recycleDir = type === 'video' ? VIDEO_RECYCLE_DIR : IMAGE_RECYCLE_DIR;
+  const isValid = type === 'video' ? scanner.isVideo : scanner.isImage;
+  ensureDir(recycleDir);
   try {
-    const files = fs.readdirSync(RECYCLE_DIR)
+    const files = fs.readdirSync(recycleDir)
       .filter(f => {
-        const p = path.join(RECYCLE_DIR, f);
-        return !fs.statSync(p).isDirectory() && scanner.isImage(f);
+        const p = path.join(recycleDir, f);
+        return !fs.statSync(p).isDirectory() && isValid(f);
       })
       .map(f => {
-        const stats = fs.statSync(path.join(RECYCLE_DIR, f));
+        const stats = fs.statSync(path.join(recycleDir, f));
         return { filename: f, size: stats.size, modified: stats.mtimeMs };
       })
       .sort((a, b) => b.modified - a.modified);
@@ -100,10 +116,11 @@ router.get('/', (req, res) => {
 });
 
 // DELETE /api/recycle/:filename
-// Permanently deletes a file from the recycle bin
 router.delete('/:filename', (req, res) => {
+  const type = req.query.type === 'video' ? 'video' : 'image';
   const filename = path.basename(req.params.filename);
-  const filePath = path.join(RECYCLE_DIR, filename);
+  const recycleDir = type === 'video' ? VIDEO_RECYCLE_DIR : IMAGE_RECYCLE_DIR;
+  const filePath = path.join(recycleDir, filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found.' });
   try {
     fs.unlinkSync(filePath);

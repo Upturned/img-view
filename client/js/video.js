@@ -1,4 +1,4 @@
-// Video player page — playback, prev/next, sidebar navigation, open-with
+// Video player page — playback, prev/next, sidebar, zoom/pan, tags, recycle, open-with
 
 const params       = new URLSearchParams(location.search);
 const initCategory = params.get('category') || '';
@@ -27,17 +27,116 @@ function loadList() {
 }
 
 // ── DOM refs ──
-const mainVideo     = document.getElementById('main-video');
-const videoFilename = document.getElementById('video-filename');
-const videoMeta     = document.getElementById('video-meta');
-const videoCounter  = document.getElementById('video-counter');
-const btnPrev       = document.getElementById('btn-prev');
-const btnNext       = document.getElementById('btn-next');
-const sidebarList   = document.getElementById('sidebar-list');
-const sidebar       = document.getElementById('sidebar');
+const mainVideo      = document.getElementById('main-video');
+const videoFilename  = document.getElementById('video-filename');
+const videoMeta      = document.getElementById('video-meta');
+const videoCounter   = document.getElementById('video-counter');
+const btnPrev        = document.getElementById('btn-prev');
+const btnNext        = document.getElementById('btn-next');
+const sidebarList    = document.getElementById('sidebar-list');
+const sidebar        = document.getElementById('sidebar');
+const videoContainer = document.getElementById('video-container');
+const tagsPanel      = document.getElementById('tags-panel');
+const zoomLabel      = document.getElementById('zoom-label');
+const btnRecycle     = document.getElementById('btn-recycle');
 
 // ── Theme ──
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
+
+// ── Tag picker ──
+const tagPicker = createTagPicker({ type: 'video' });
+
+// ── Zoom / Pan state ──
+let zoom    = 1;
+let panX    = 0;
+let panY    = 0;
+let isDragging  = false;
+let didPan      = false;
+let dragStart   = { x: 0, y: 0 };
+let panStart    = { x: 0, y: 0 };
+
+const ZOOM_MIN      = 0.1;
+const ZOOM_MAX      = 10;
+const ZOOM_STEP     = 0.15;
+const DRAG_THRESHOLD = 5;
+
+function applyTransform(animate = false) {
+  mainVideo.style.transition = animate ? 'transform 0.15s ease' : 'none';
+  mainVideo.style.transform  = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  zoomLabel.textContent = Math.round(zoom * 100) + '%';
+  constrainPan();
+  updateCursor();
+}
+
+function constrainPan() {
+  const area = videoContainer.getBoundingClientRect();
+  const maxX = zoom > 1 ? area.width  * (zoom - 1) / 2 : 0;
+  const maxY = zoom > 1 ? area.height * (zoom - 1) / 2 : 0;
+  panX = Math.max(-maxX, Math.min(maxX, panX));
+  panY = Math.max(-maxY, Math.min(maxY, panY));
+  mainVideo.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+}
+
+function updateCursor() {
+  videoContainer.classList.toggle('panning', zoom > 1 && !isDragging);
+}
+
+function resetZoom() {
+  zoom = 1; panX = 0; panY = 0;
+  applyTransform(true);
+}
+
+function zoomAt(clientX, clientY, delta) {
+  const area = videoContainer.getBoundingClientRect();
+  const cx   = clientX - area.left - area.width  / 2;
+  const cy   = clientY - area.top  - area.height / 2;
+  const prevZoom = zoom;
+  zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom * (1 + delta)));
+  const scale = zoom / prevZoom;
+  panX = cx - scale * (cx - panX);
+  panY = cy - scale * (cy - panY);
+  applyTransform();
+}
+
+// Scroll to zoom
+videoContainer.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+}, { passive: false });
+
+// Drag to pan — uses a movement threshold so short clicks still reach native video controls
+videoContainer.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  isDragging = true;
+  didPan     = false;
+  dragStart  = { x: e.clientX, y: e.clientY };
+  panStart   = { x: panX, y: panY };
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - dragStart.x;
+  const dy = e.clientY - dragStart.y;
+  if (!didPan && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+  didPan = true;
+  panX = panStart.x + dx;
+  panY = panStart.y + dy;
+  constrainPan();
+  videoContainer.classList.add('dragging');
+});
+
+window.addEventListener('mouseup', () => {
+  if (isDragging) {
+    isDragging = false;
+    videoContainer.classList.remove('dragging');
+    updateCursor();
+  }
+});
+
+// Zoom buttons
+document.getElementById('btn-zoom-in').addEventListener('click',    () => { zoom = Math.min(ZOOM_MAX, zoom * (1 + ZOOM_STEP)); panX = 0; panY = 0; applyTransform(true); });
+document.getElementById('btn-zoom-out').addEventListener('click',   () => { zoom = Math.max(ZOOM_MIN, zoom * (1 - ZOOM_STEP)); applyTransform(true); constrainPan(); });
+document.getElementById('btn-zoom-reset').addEventListener('click', () => resetZoom());
 
 // ── Load video ──
 function loadVideo(index) {
@@ -61,7 +160,7 @@ function loadVideo(index) {
   const newParams = new URLSearchParams({ category: v.category, filename: v.filename, index });
   history.replaceState(null, '', `?${newParams}`);
 
-  loadTags(v.category, v.filename);
+  tagPicker.loadFor(v.category, v.filename);
   renderSidebar();
 }
 
@@ -97,11 +196,8 @@ document.getElementById('btn-random-video').addEventListener('click', async () =
   try {
     const rand = await api.getRandomVideo({ category: meta.category, exclude });
     const idx = videoList.findIndex(i => i.category === rand.category && i.filename === rand.filename);
-    if (idx >= 0) {
-      loadVideo(idx);
-    } else {
-      goTo('video', { category: rand.category, filename: rand.filename });
-    }
+    if (idx >= 0) loadVideo(idx);
+    else goTo('video', { category: rand.category, filename: rand.filename });
   } catch {
     showToast('No other videos available.', 'error');
   }
@@ -128,67 +224,18 @@ document.getElementById('btn-fullscreen').addEventListener('click', () => {
   }
 });
 
-// ── Tags ──
-let currentTags = [];
-const tagsPanel   = document.getElementById('tags-panel');
-const tagsDisplay = document.getElementById('tags-display');
-const tagInput    = document.getElementById('tag-input');
-
-document.getElementById('btn-tags-toggle').addEventListener('click', () => {
-  const open = tagsPanel.style.display === 'none' || tagsPanel.style.display === '';
-  tagsPanel.style.display = open ? 'block' : 'none';
-  if (open) tagInput.focus();
-});
-
-async function loadTags(category, filename) {
-  try {
-    currentTags = await api.getImageTags(category, filename, 'video');
-    renderTags();
-  } catch {
-    currentTags = [];
-    renderTags();
-  }
-}
-
-function renderTags() {
-  tagsDisplay.innerHTML = currentTags.map(tag => `
-    <span class="tag">
-      ${escHtml(tag)}
-      <span class="tag-remove" data-tag="${escHtml(tag)}" title="Remove">×</span>
-    </span>`).join('');
-  tagsDisplay.querySelectorAll('.tag-remove').forEach(btn => {
-    btn.addEventListener('click', () => removeTag(btn.dataset.tag));
-  });
-}
-
-async function saveTagsToServer() {
+// ── Recycle ──
+btnRecycle.addEventListener('click', async () => {
   const v = videoList[currentIndex];
   if (!v) return;
-  try { await api.setImageTags(v.category, v.filename, currentTags, 'video'); }
-  catch (err) { showToast('Failed to save tags: ' + err.message, 'error'); }
-}
-
-async function removeTag(tag) {
-  currentTags = currentTags.filter(t => t !== tag);
-  renderTags();
-  await saveTagsToServer();
-}
-
-tagInput.addEventListener('keydown', async (e) => {
-  if (e.key === 'Enter' || e.key === ',') {
-    e.preventDefault();
-    const val = tagInput.value.trim().toLowerCase().replace(/,/g, '');
-    if (val && !currentTags.includes(val)) {
-      currentTags = [...currentTags, val];
-      renderTags();
-      await saveTagsToServer();
-    }
-    tagInput.value = '';
-  }
-  if (e.key === 'Backspace' && tagInput.value === '' && currentTags.length > 0) {
-    currentTags = currentTags.slice(0, -1);
-    renderTags();
-    await saveTagsToServer();
+  try {
+    await api.recycleVideo(v.category, v.filename);
+    showToast('Moved to recycle bin.', 'success');
+    videoList.splice(currentIndex, 1);
+    if (videoList.length === 0) { goBack(); return; }
+    loadVideo(Math.min(currentIndex, videoList.length - 1));
+  } catch (err) {
+    showToast(err.message, 'error');
   }
 });
 
@@ -216,7 +263,6 @@ function renderSidebar() {
     });
   });
 
-  // Scroll active item into view
   const active = sidebarList.querySelector('.sidebar-item.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
@@ -227,19 +273,12 @@ document.addEventListener('keydown', (e) => {
 
   switch (e.key) {
     case 'ArrowLeft':
-      // If video is playing, seek back 5s; otherwise go to prev video
-      if (mainVideo.duration) {
-        mainVideo.currentTime = Math.max(0, mainVideo.currentTime - 5);
-      } else {
-        if (currentIndex > 0) loadVideo(currentIndex - 1);
-      }
+      if (mainVideo.duration) mainVideo.currentTime = Math.max(0, mainVideo.currentTime - 5);
+      else if (currentIndex > 0) loadVideo(currentIndex - 1);
       break;
     case 'ArrowRight':
-      if (mainVideo.duration) {
-        mainVideo.currentTime = Math.min(mainVideo.duration, mainVideo.currentTime + 5);
-      } else {
-        if (currentIndex < videoList.length - 1) loadVideo(currentIndex + 1);
-      }
+      if (mainVideo.duration) mainVideo.currentTime = Math.min(mainVideo.duration, mainVideo.currentTime + 5);
+      else if (currentIndex < videoList.length - 1) loadVideo(currentIndex + 1);
       break;
     case ' ':
       e.preventDefault();
@@ -254,6 +293,7 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'Escape':
       if (document.fullscreenElement) document.exitFullscreen();
+      else if (tagsPanel.classList.contains('open')) tagsPanel.classList.remove('open');
       break;
     case 'm': case 'M':
       mainVideo.muted = !mainVideo.muted;
@@ -266,6 +306,15 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault();
       mainVideo.volume = Math.max(0, mainVideo.volume - 0.1);
       break;
+    case '+': case '=':
+      document.getElementById('btn-zoom-in').click();
+      break;
+    case '-':
+      document.getElementById('btn-zoom-out').click();
+      break;
+    case '0':
+      resetZoom();
+      break;
   }
 });
 
@@ -274,10 +323,12 @@ function escHtml(str) {
 }
 
 // ── Right-click on video ──
-contextMenu.on(document.getElementById('video-panel'), () => {
+contextMenu.on(videoContainer, () => {
   const v = videoList[currentIndex];
   if (!v) return null;
   return [
+    { icon: '🗑', label: 'Move to recycle bin', action: () => btnRecycle.click() },
+    { label: '---' },
     { icon: '✏️', label: 'Rename', action: () => ctxRename(v.category, v.filename, 'video', (newName) => {
         videoList[currentIndex] = { ...v, filename: newName, name: newName.slice(0, newName.lastIndexOf('.')) };
         loadVideo(currentIndex);
@@ -294,6 +345,7 @@ contextMenu.on(document.getElementById('video-panel'), () => {
 
 // ── Init ──
 loadList();
+tagPicker.init();
 if (videoList.length > 0) {
   loadVideo(currentIndex);
 } else {

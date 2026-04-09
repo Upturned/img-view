@@ -1,11 +1,16 @@
-// Videos page — category list + video grid within a category
+// Videos page — category list + video grid within a category + selection mode
 
 let currentCategory = null;
 let sortOrder       = 'asc';
 let activeTags      = [];         // managed by tagSidebar
 let allCategories   = [];
 let allVideos       = [];
-let videoTagsMap    = {};         // { "category/filename": [tags] } — full map for client-side filtering
+let displayVideos   = [];         // after client-side tag filter
+let videoTagsMap    = {};         // { "category/filename": [tags] }
+
+// Selection state (only active when #section-videos is visible)
+let selectionMode = false;
+let selectedSet   = new Set();    // stores filenames
 
 const sectionCats   = document.getElementById('section-categories');
 const sectionVideos = document.getElementById('section-videos');
@@ -19,8 +24,24 @@ const sortSelect    = document.getElementById('sort-select');
 const orderBtn      = document.getElementById('btn-order');
 const searchInput   = document.getElementById('search-input');
 const searchClear   = document.getElementById('search-clear');
+const sizeSlider    = document.getElementById('size-slider');
+const btnSelectMode = document.getElementById('btn-select-mode');
+const selectionBar  = document.getElementById('selection-bar');
+const selectionCount= document.getElementById('selection-count');
 
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
+
+// Restore saved grid size
+const savedCols = localStorage.getItem('video-grid-cols');
+if (savedCols) {
+  sizeSlider.value = savedCols;
+  videoGrid.style.setProperty('--grid-cols', savedCols);
+}
+
+sizeSlider.addEventListener('input', () => {
+  videoGrid.style.setProperty('--grid-cols', sizeSlider.value);
+  localStorage.setItem('video-grid-cols', sizeSlider.value);
+});
 
 const tagSidebar = createTagSidebar({
   type: 'video',
@@ -30,7 +51,8 @@ const tagSidebar = createTagSidebar({
 // ── Filter ──
 function applyFilter() {
   if (!sectionVideos.classList.contains('hidden')) {
-    renderVideoGrid(getFilteredVideos());
+    displayVideos = getFilteredVideos();
+    renderVideoGrid(displayVideos);
   } else {
     renderCategoryGrid(getFilteredCategories());
   }
@@ -97,7 +119,7 @@ function renderCategoryGrid(categories) {
     card.addEventListener('click', () => openCategory(categories[i].name));
     card.addEventListener('keydown', e => { if (e.key === 'Enter') openCategory(categories[i].name); });
     contextMenu.on(card, () => [
-      { icon: '🎬', label: 'Open category',    action: () => openCategory(categories[i].name) },
+      { icon: '🎬', label: 'Open category',   action: () => openCategory(categories[i].name) },
       { label: '---' },
       { icon: '➕', label: 'Add video from…', action: () => ctxAddFile('video', categories[i].name, () => loadCategories()) },
     ]);
@@ -123,6 +145,7 @@ async function openCategory(name) {
   document.getElementById('breadcrumb-cat-name').textContent = name;
   sectionCats.classList.add('hidden');
   sectionVideos.classList.remove('hidden');
+  exitSelectionMode();
   await loadVideos();
 }
 
@@ -130,11 +153,9 @@ async function openCategory(name) {
 async function loadVideos() {
   if (!currentCategory) return;
   try {
-    allVideos = await api.getVideos(currentCategory, {
-      sort: sortSelect.value,
-      order: sortOrder,
-    });
-    renderVideoGrid(getFilteredVideos());
+    allVideos = await api.getVideos(currentCategory, { sort: sortSelect.value, order: sortOrder });
+    displayVideos = getFilteredVideos();
+    renderVideoGrid(displayVideos);
   } catch (err) {
     showToast('Failed to load videos: ' + err.message, 'error');
   }
@@ -157,16 +178,24 @@ function renderVideoGrid(videos) {
   });
 
   videoGrid.querySelectorAll('.card').forEach((card, i) => {
-    card.addEventListener('click', () => openVideo(videos, i));
-    card.addEventListener('keydown', e => { if (e.key === 'Enter') openVideo(videos, i); });
+    card.addEventListener('click', () => {
+      if (selectionMode) toggleSelect(i, card);
+      else openVideo(videos, i);
+    });
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { if (selectionMode) toggleSelect(i, card); else openVideo(videos, i); }
+    });
+
     contextMenu.on(card, () => {
       const v = videos[i];
       return [
-        { icon: '▶',  label: 'Play',             action: () => openVideo(videos, i) },
+        { icon: '▶',  label: 'Play',            action: () => openVideo(videos, i) },
         { label: '---' },
-        { icon: '✏️', label: 'Rename',            action: () => ctxRename(v.category, v.filename, 'video', () => loadVideos()) },
+        { icon: '🗑', label: 'Move to recycle bin', action: () => recycleCard(v, i) },
         { label: '---' },
-        { icon: '➕', label: 'Add video from…',  action: () => ctxAddFile('video', v.category, () => loadVideos()) },
+        { icon: '✏️', label: 'Rename',           action: () => ctxRename(v.category, v.filename, 'video', () => loadVideos()) },
+        { label: '---' },
+        { icon: '➕', label: 'Add video from…', action: () => ctxAddFile('video', v.category, () => loadVideos()) },
       ];
     });
   });
@@ -177,8 +206,10 @@ function renderVideoGrid(videos) {
 
 function videoCard(v) {
   const src = videoUrl(v.category, v.filename);
+  const selected = selectedSet.has(v.filename) ? ' selected' : '';
   return `
-    <div class="card" tabindex="0" role="button" aria-label="Play ${v.filename}">
+    <div class="card${selected}" tabindex="0" role="button" aria-label="Play ${v.filename}" style="position:relative;">
+      <div class="card-select-check">✓</div>
       <div class="video-card-cover">
         <video class="video-thumb" src="${src}#t=0.1" muted preload="metadata"></video>
         <span class="play-icon">▶</span>
@@ -187,6 +218,18 @@ function videoCard(v) {
         <div class="card-title">${escHtml(v.name)}</div>
       </div>
     </div>`;
+}
+
+async function recycleCard(v, i) {
+  try {
+    await api.recycleVideo(v.category, v.filename);
+    showToast(`"${v.filename}" moved to recycle bin.`, 'success');
+    displayVideos.splice(i, 1);
+    allVideos = allVideos.filter(av => av.filename !== v.filename || av.category !== v.category);
+    renderVideoGrid(displayVideos);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 function openVideo(videos, index) {
@@ -200,6 +243,7 @@ document.getElementById('breadcrumb-home-link').addEventListener('click', (e) =>
   e.preventDefault();
   currentCategory = null;
   allVideos = [];
+  exitSelectionMode();
   sectionVideos.classList.add('hidden');
   sectionCats.classList.remove('hidden');
   renderCategoryGrid(getFilteredCategories());
@@ -231,19 +275,143 @@ searchInput.addEventListener('input', () => {
   searchClear.classList.toggle('hidden', !q);
   clearTimeout(searchDebounce);
   searchDebounce = setTimeout(() => {
-    if (sectionVideos.classList.contains('hidden')) {
-      renderCategoryGrid(getFilteredCategories());
-    }
+    if (sectionVideos.classList.contains('hidden')) renderCategoryGrid(getFilteredCategories());
   }, 180);
 });
 
 searchClear.addEventListener('click', () => {
   searchInput.value = '';
   searchClear.classList.add('hidden');
-  if (sectionVideos.classList.contains('hidden')) {
-    renderCategoryGrid(getFilteredCategories());
-  }
+  if (sectionVideos.classList.contains('hidden')) renderCategoryGrid(getFilteredCategories());
   searchInput.focus();
+});
+
+// ── Selection mode ──
+function toggleSelect(index, cardEl) {
+  const v = displayVideos[index];
+  if (selectedSet.has(v.filename)) {
+    selectedSet.delete(v.filename);
+    cardEl.classList.remove('selected');
+  } else {
+    selectedSet.add(v.filename);
+    cardEl.classList.add('selected');
+  }
+  updateSelectionBar();
+}
+
+function updateSelectionBar() {
+  const n = selectedSet.size;
+  selectionCount.textContent = `${n} selected`;
+  document.getElementById('btn-select-move').disabled    = n === 0;
+  document.getElementById('btn-select-copy').disabled    = n === 0;
+  document.getElementById('btn-select-recycle').disabled = n === 0;
+}
+
+function enterSelectionMode() {
+  selectionMode = true;
+  selectedSet.clear();
+  videoGrid.classList.add('select-mode');
+  btnSelectMode.classList.add('active');
+  selectionBar.classList.remove('hidden');
+  updateSelectionBar();
+  renderVideoGrid(displayVideos);
+}
+
+function exitSelectionMode() {
+  selectionMode = false;
+  selectedSet.clear();
+  videoGrid.classList.remove('select-mode');
+  btnSelectMode.classList.remove('active');
+  selectionBar.classList.add('hidden');
+  renderVideoGrid(displayVideos);
+}
+
+btnSelectMode.addEventListener('click', () => {
+  if (selectionMode) exitSelectionMode(); else enterSelectionMode();
+});
+
+document.getElementById('btn-select-cancel').addEventListener('click', exitSelectionMode);
+
+document.getElementById('btn-select-all').addEventListener('click', () => {
+  const allSelected = selectedSet.size === displayVideos.length;
+  if (allSelected) { selectedSet.clear(); }
+  else { displayVideos.forEach(v => selectedSet.add(v.filename)); }
+  videoGrid.querySelectorAll('.card').forEach((card, i) => {
+    const v = displayVideos[i];
+    if (v) card.classList.toggle('selected', selectedSet.has(v.filename));
+  });
+  updateSelectionBar();
+});
+
+document.getElementById('btn-select-move').addEventListener('click', async () => {
+  if (selectedSet.size === 0) return;
+  const files = [...selectedSet].map(filename => ({ filename, fromCategory: currentCategory }));
+  try {
+    const categories = await api.getVideoCategories();
+    categoryPicker.show(
+      `Move ${files.length} video${files.length !== 1 ? 's' : ''} to…`,
+      categories.filter(c => c.name !== currentCategory),
+      async (dest) => {
+        try {
+          const result = await api.moveFiles(files, dest, 'video');
+          const msg = result.errors.length
+            ? `Moved ${result.moved}, ${result.errors.length} failed.`
+            : `Moved ${result.moved} video${result.moved !== 1 ? 's' : ''} to "${dest}".`;
+          showToast(msg, result.errors.length ? 'error' : 'success');
+          exitSelectionMode();
+          await loadVideos();
+        } catch (err) { showToast(err.message, 'error'); }
+      }
+    );
+  } catch (err) { showToast('Failed to load categories: ' + err.message, 'error'); }
+});
+
+document.getElementById('btn-select-copy').addEventListener('click', async () => {
+  if (selectedSet.size === 0) return;
+  const files = [...selectedSet].map(filename => ({ filename, fromCategory: currentCategory }));
+  try {
+    const categories = await api.getVideoCategories();
+    categoryPicker.show(
+      `Copy ${files.length} video${files.length !== 1 ? 's' : ''} to…`,
+      categories.filter(c => c.name !== currentCategory),
+      async (dest) => {
+        try {
+          const result = await api.copyFiles(files, dest, 'video');
+          const msg = result.errors.length
+            ? `Copied ${result.copied}, ${result.errors.length} failed.`
+            : `Copied ${result.copied} video${result.copied !== 1 ? 's' : ''} to "${dest}".`;
+          showToast(msg, result.errors.length ? 'error' : 'success');
+          exitSelectionMode();
+        } catch (err) { showToast(err.message, 'error'); }
+      }
+    );
+  } catch (err) { showToast('Failed to load categories: ' + err.message, 'error'); }
+});
+
+document.getElementById('btn-select-recycle').addEventListener('click', async () => {
+  if (selectedSet.size === 0) return;
+  const toRecycle = [...selectedSet];
+  if (!confirm(`Move ${toRecycle.length} video${toRecycle.length !== 1 ? 's' : ''} to recycle bin?`)) return;
+
+  let recycled = 0;
+  const errors = [];
+  for (const filename of toRecycle) {
+    const v = allVideos.find(v => v.filename === filename);
+    if (!v) continue;
+    try {
+      await api.recycleVideo(v.category, v.filename);
+      recycled++;
+    } catch {
+      errors.push(filename);
+    }
+  }
+
+  const msg = errors.length
+    ? `Recycled ${recycled}, ${errors.length} failed.`
+    : `Recycled ${recycled} video${recycled !== 1 ? 's' : ''}.`;
+  showToast(msg, errors.length ? 'error' : 'success');
+  exitSelectionMode();
+  await loadVideos();
 });
 
 // ── New category modal ──

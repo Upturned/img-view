@@ -48,6 +48,9 @@ const btnSlideshowPlay = document.getElementById('btn-slideshow-play');
 // ── Theme ──
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
 
+// ── Tag picker ──
+const tagPicker = createTagPicker({ type: 'image' });
+
 // ── Zoom / Pan state ──
 let zoom    = 1;
 let panX    = 0;
@@ -98,19 +101,16 @@ function resetZoom() {
   const scaleW = area.width  / mainImage.naturalWidth;
   const scaleH = area.height / mainImage.naturalHeight;
 
-  // Default: fit-to-screen if larger than viewport, else natural size (1:1)
   if (mainImage.naturalWidth > area.width || mainImage.naturalHeight > area.height) {
     zoom = Math.min(scaleW, scaleH);
   } else {
     zoom = 1;
   }
-
   panX = 0;
   panY = 0;
   applyTransform(true);
 }
 
-// Zoom towards a point (clientX/Y)
 function zoomAt(clientX, clientY, delta) {
   const area    = imageContainer.getBoundingClientRect();
   const cx      = clientX - area.left - area.width  / 2;
@@ -170,7 +170,7 @@ function loadImage(index) {
   mainImage.onload = () => {
     mainImage.classList.remove('loading');
     resetZoom();
-    loadTags(img.category, img.filename);
+    tagPicker.loadFor(img.category, img.filename);
     updateActionButtons();
   };
   mainImage.onerror = () => {
@@ -180,7 +180,6 @@ function loadImage(index) {
   mainImage.src = imageUrl(img.category, img.filename);
   mainImage.alt = img.name;
 
-  // Update UI
   document.title = `${img.name} — img-view`;
   imgFilename.textContent = img.filename;
   imgMeta.textContent     = img.category;
@@ -189,7 +188,6 @@ function loadImage(index) {
   btnPrev.disabled = index === 0;
   btnNext.disabled = index === imageList.length - 1;
 
-  // Update URL without reload
   const newParams = new URLSearchParams({ category: img.category, filename: img.filename, index });
   history.replaceState(null, '', `?${newParams}`);
 }
@@ -228,19 +226,10 @@ async function randomImage() {
   const meta    = (() => { try { return JSON.parse(sessionStorage.getItem('imageListMeta') || '{}'); } catch { return {}; } })();
 
   try {
-    const img = await api.getRandom({
-      category: meta.category,
-      tag:      meta.tag,
-      exclude,
-    });
-
-    // Find it in the current list and jump, or navigate to it fresh
+    const img = await api.getRandom({ category: meta.category, tag: meta.tag, exclude });
     const idx = imageList.findIndex(i => i.category === img.category && i.filename === img.filename);
-    if (idx >= 0) {
-      loadImage(idx);
-    } else {
-      goTo('image', { category: img.category, filename: img.filename });
-    }
+    if (idx >= 0) loadImage(idx);
+    else goTo('image', { category: img.category, filename: img.filename });
   } catch {
     showToast('No other images available.', 'error');
   }
@@ -263,11 +252,8 @@ const viewer = document.getElementById('viewer');
 document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
 
 function toggleFullscreen() {
-  if (!document.fullscreenElement) {
-    viewer.requestFullscreen().catch(() => {});
-  } else {
-    document.exitFullscreen();
-  }
+  if (!document.fullscreenElement) viewer.requestFullscreen().catch(() => {});
+  else document.exitFullscreen();
 }
 
 // ── Favorites & Recycle ──
@@ -321,132 +307,9 @@ btnRecycle.addEventListener('click', async () => {
   }
 });
 
-// ── Tags ──
-let currentTags = [];
-let allTags = [];      // [{ tag, count }] from server
-let pickerQuery = '';  // current search filter in the picker
-
-const tagsDisplay    = document.getElementById('tags-display');
-const tagsPickerRow  = document.getElementById('tags-picker-row');
-const pickerSearch   = document.getElementById('tags-picker-search');
-const tagInputNew    = document.getElementById('tag-input-new');
-const btnAddNewTag   = document.getElementById('btn-add-new-tag');
-
-document.getElementById('btn-tags-toggle').addEventListener('click', async () => {
-  tagsPanel.classList.toggle('open');
-  if (tagsPanel.classList.contains('open')) {
-    // Fetch all tags for the picker (fire async, render when ready)
-    try {
-      allTags = await api.getUniqueTags();
-    } catch { allTags = []; }
-    renderPicker();
-    pickerSearch.focus();
-  }
-});
-
-async function loadTags(category, filename) {
-  try {
-    currentTags = await api.getImageTags(category, filename);
-  } catch {
-    currentTags = [];
-  }
-  renderCurrentTags();
-  // Refresh picker if panel is open (so active states update)
-  if (tagsPanel.classList.contains('open')) renderPicker();
-}
-
-function renderCurrentTags() {
-  tagsDisplay.innerHTML = currentTags.map(tag => `
-    <span class="tag">
-      ${escHtml(tag)}
-      <span class="tag-remove" data-tag="${escHtml(tag)}" title="Remove tag">×</span>
-    </span>`).join('');
-
-  tagsDisplay.querySelectorAll('.tag-remove').forEach(btn => {
-    btn.addEventListener('click', () => removeTag(btn.dataset.tag));
-  });
-}
-
-function renderPicker() {
-  const q = pickerQuery.toLowerCase();
-  const visible = allTags.filter(({ tag }) => !q || tag.includes(q));
-
-  tagsPickerRow.innerHTML = visible.map(({ tag }) =>
-    `<button class="tag-chip-picker${currentTags.includes(tag) ? ' active' : ''}" data-tag="${escHtml(tag)}">${escHtml(tag)}</button>`
-  ).join('');
-
-  tagsPickerRow.querySelectorAll('.tag-chip-picker').forEach(chip => {
-    chip.addEventListener('click', () => togglePickerTag(chip.dataset.tag));
-  });
-}
-
-async function togglePickerTag(tag) {
-  if (currentTags.includes(tag)) {
-    currentTags = currentTags.filter(t => t !== tag);
-  } else {
-    currentTags = [...currentTags, tag];
-  }
-  renderCurrentTags();
-  renderPicker();
-  await saveTagsToServer();
-}
-
-pickerSearch.addEventListener('input', () => {
-  pickerQuery = pickerSearch.value.trim();
-  renderPicker();
-});
-
-btnAddNewTag.addEventListener('click', () => {
-  tagInputNew.classList.toggle('hidden');
-  if (!tagInputNew.classList.contains('hidden')) tagInputNew.focus();
-  else { tagInputNew.value = ''; }
-});
-
-tagInputNew.addEventListener('keydown', async (e) => {
-  if (e.key === 'Escape') {
-    tagInputNew.classList.add('hidden');
-    tagInputNew.value = '';
-    return;
-  }
-  if (e.key === 'Enter' || e.key === ',') {
-    e.preventDefault();
-    const val = tagInputNew.value.trim().toLowerCase().replace(/,/g, '');
-    if (val && !currentTags.includes(val)) {
-      currentTags = [...currentTags, val];
-      // Add to allTags if not already present
-      if (!allTags.find(t => t.tag === val)) {
-        allTags = [...allTags, { tag: val, count: 1 }].sort((a, b) => a.tag.localeCompare(b.tag));
-      }
-      renderCurrentTags();
-      renderPicker();
-      await saveTagsToServer();
-    }
-    tagInputNew.value = '';
-    tagInputNew.classList.add('hidden');
-  }
-});
-
-async function saveTagsToServer() {
-  const img = imageList[currentIndex];
-  if (!img) return;
-  try {
-    await api.setImageTags(img.category, img.filename, currentTags);
-  } catch (err) {
-    showToast('Failed to save tags: ' + err.message, 'error');
-  }
-}
-
-async function removeTag(tag) {
-  currentTags = currentTags.filter(t => t !== tag);
-  renderCurrentTags();
-  if (tagsPanel.classList.contains('open')) renderPicker();
-  await saveTagsToServer();
-}
-
 // ── Slideshow ──
 let slideshowTimer  = null;
 let slideshowActive = false;
-let slideshowProgress = null;
 
 document.getElementById('btn-slideshow-toggle').addEventListener('click', () => {
   slideshowPanel.classList.toggle('open');
@@ -487,7 +350,6 @@ function scheduleNext() {
   if (!slideshowActive) return;
   const ms = parseInt(intervalSlider.value, 10) * 1000;
 
-  // Animate progress bar
   slideshowBar.classList.remove('hidden');
   slideshowBar.style.transition = 'none';
   slideshowBar.style.width = '0%';
@@ -501,45 +363,33 @@ function scheduleNext() {
   slideshowTimer = setTimeout(() => {
     if (!slideshowActive) return;
     const next = currentIndex + 1;
-    if (next < imageList.length) {
-      loadImage(next);
-      scheduleNext();
-    } else {
-      // Loop back to start
-      loadImage(0);
-      scheduleNext();
-    }
+    if (next < imageList.length) { loadImage(next); scheduleNext(); }
+    else { loadImage(0); scheduleNext(); }
   }, ms);
 }
 
 // ── Keyboard shortcuts ──
 document.addEventListener('keydown', (e) => {
-  // Don't fire when typing in an input
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
   switch (e.key) {
-    case 'ArrowLeft':  e.preventDefault(); navigate(-1);       break;
-    case 'ArrowRight': e.preventDefault(); navigate(1);        break;
-    case 'Backspace':  e.preventDefault(); goBack();           break;
-    case 'r': case 'R': randomImage();                         break;
-    case 'f': case 'F': toggleFullscreen();                    break;
+    case 'ArrowLeft':  e.preventDefault(); navigate(-1);    break;
+    case 'ArrowRight': e.preventDefault(); navigate(1);     break;
+    case 'Backspace':  e.preventDefault(); goBack();        break;
+    case 'r': case 'R': randomImage();                      break;
+    case 'f': case 'F': toggleFullscreen();                 break;
     case 'Escape':
       if (document.fullscreenElement) document.exitFullscreen();
       else if (slideshowActive) stopSlideshow();
-      else if (tagsPanel.classList.contains('open')) {
-        tagsPanel.classList.remove('open');
-        pickerQuery = '';
-        pickerSearch.value = '';
-      }
+      else if (tagsPanel.classList.contains('open')) tagsPanel.classList.remove('open');
       else if (slideshowPanel.classList.contains('open')) slideshowPanel.classList.remove('open');
       break;
-    case '+': case '=': document.getElementById('btn-zoom-in').click();    break;
-    case '-':           document.getElementById('btn-zoom-out').click();   break;
-    case '0':           resetZoom();                           break;
+    case '+': case '=': document.getElementById('btn-zoom-in').click();  break;
+    case '-':           document.getElementById('btn-zoom-out').click(); break;
+    case '0':           resetZoom();                        break;
   }
 });
 
-// Close slideshow panel when clicking outside
 document.addEventListener('click', (e) => {
   if (!slideshowPanel.contains(e.target) && e.target !== document.getElementById('btn-slideshow-toggle')) {
     slideshowPanel.classList.remove('open');
@@ -579,10 +429,8 @@ contextMenu.on(imageContainer, () => {
 
 // ── Init ──
 loadList();
+tagPicker.init();
 initFavorites().then(() => {
-  if (imageList.length > 0) {
-    loadImage(currentIndex);
-  } else {
-    showToast('No image to display.', 'error');
-  }
+  if (imageList.length > 0) loadImage(currentIndex);
+  else showToast('No image to display.', 'error');
 });

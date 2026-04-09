@@ -56,11 +56,13 @@ const api = {
   // --- Recycle bin ---
   recycleImage: (category, filename) =>
     apiFetch(`/api/recycle/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`, { method: 'POST' }),
-  getRecycleBin: () => apiFetch('/api/recycle'),
-  deleteFromRecycleBin: (filename) =>
-    apiFetch(`/api/recycle/${encodeURIComponent(filename)}`, { method: 'DELETE' }),
-  restoreFromRecycleBin: (filename) =>
-    apiFetch(`/api/recycle/restore/${encodeURIComponent(filename)}`, { method: 'POST' }),
+  recycleVideo: (category, filename) =>
+    apiFetch(`/api/recycle/${encodeURIComponent(category)}/${encodeURIComponent(filename)}?type=video`, { method: 'POST' }),
+  getRecycleBin: (type = 'image') => apiFetch(`/api/recycle?type=${type}`),
+  deleteFromRecycleBin: (filename, type = 'image') =>
+    apiFetch(`/api/recycle/${encodeURIComponent(filename)}?type=${type}`, { method: 'DELETE' }),
+  restoreFromRecycleBin: (filename, type = 'image') =>
+    apiFetch(`/api/recycle/restore/${encodeURIComponent(filename)}?type=${type}`, { method: 'POST' }),
 
   // --- Search ---
   // tags can be a string (single) or an array of strings (multi, AND logic)

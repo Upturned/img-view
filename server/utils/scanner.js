@@ -77,6 +77,7 @@ function scanVideoCategories() {
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (HIDDEN_CATEGORIES.has(entry.name)) continue;
 
     const categoryPath = path.join(VIDEOS_DIR, entry.name);
     const files = fs.readdirSync(categoryPath).filter(isVideo);
