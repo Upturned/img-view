@@ -3,7 +3,7 @@
 ## Overview
 
 A local media manager running as a Node.js + Express server with a plain HTML/CSS/JS frontend.
-Organised into **sides** (Images, Videos, with Audio and Text-Writer planned), each accessible from a central hub page.
+Organised into **sides** (Images, Videos, Audio, with Text-Writer planned), each accessible from a central hub page.
 Designed for offline, desktop-only use. No internet connection required at runtime. No build step.
 
 ---
@@ -21,7 +21,7 @@ Designed for offline, desktop-only use. No internet connection required at runti
 - Recycle bin: moves files to a hidden folder; restore or delete permanently from UI.
 
 ### Navigation model
-- The app is divided into **sides**: Images, Videos, Audio (planned), Text-Writer (planned).
+- The app is divided into **sides**: Images, Videos, Audio, Text-Writer (planned).
 - `/pages/hub.html` is the entry point — a card grid with one card per side.
 - The logo in every page navbar links back to the hub.
 - Each side owns its own pages, routes, and data. The shared navbar (`navbar.js`) only contains the Organize button; side-switching happens through the hub.
@@ -39,6 +39,7 @@ Designed for offline, desktop-only use. No internet connection required at runti
 ### Supported Formats
 - Images: JPG, JPEG, PNG, GIF (animated), WebP, SVG, AVIF
 - Videos: MP4, WebM
+- Audio: MP3, FLAC, OGG, WAV, M4A, AAC, OPUS
 - PDFs: not supported
 
 ### Search
@@ -50,9 +51,9 @@ Designed for offline, desktop-only use. No internet connection required at runti
 ### Tags
 - Stored in `data/imgview.db` (SQLite, `file_tags` + `tags` tables).
 - Tags survive file moves and renames — the DB row is updated atomically with the disk operation.
-- Add, remove, and search tags inline in the image/video viewer.
+- Add, remove, and search tags inline in the image, video, and audio viewers.
 - Batch-add: apply one tag to multiple files at once.
-- Tag sidebar on home, category, videos, and search pages — search chips, sort by name or count, count badges.
+- Tag sidebar on all main pages — search chips, sort by name or count, count badges.
 
 ### Sorting & Filtering (Category Page)
 - Sort by: name, date modified, random; ascending or descending.
@@ -60,9 +61,9 @@ Designed for offline, desktop-only use. No internet connection required at runti
 - Adjustable column count (2–10); persists via localStorage.
 
 ### Favorites
-- Toggle star on any image or video; stored in `data/imgview.db` (`files.favorited` column).
-- Favorites filter on home page and category toolbar.
-- Star badge (★) on favorited cards.
+- Toggle star on any image, video, or audio track; stored in `data/imgview.db` (`files.favorited` column).
+- Favorites filter available on each side.
+- Star badge (★) on favorited cards; star button in the audio player bar.
 - Favorited files (any type) are protected from accidental recycling.
 
 ### Image Viewer
@@ -95,9 +96,20 @@ Designed for offline, desktop-only use. No internet connection required at runti
   - `F` — fullscreen
   - `Backspace` — go back
 
+### Audio Section
+- Category structure under `/audio`; same category/recycle/favorites model as images and videos.
+- Persistent player bar fixed at the bottom of the page — stays active while browsing categories and track lists.
+- Track list view (list rows, not a card grid — audio has no visual thumbnail).
+- Tag picker panel slides up above the player bar.
+- Keyboard shortcuts:
+  - `Space` — play/pause
+  - `Alt+←` / `Alt+→` — previous / next track
+  - `M` — mute toggle
+
 ### Random
 - Random image: from all images, a specific category, or a specific tag.
 - Random video: from all videos or a specific category.
+- Random audio: from all tracks or a specific category.
 - Exclude current file to avoid repeats.
 
 ### Performance
@@ -131,7 +143,7 @@ Designed for offline, desktop-only use. No internet connection required at runti
 - **sessionStorage for navigation** — image/video lists stored in sessionStorage to preserve sort order across page transitions.
 - **Client-side filtering** — server returns sorted list; filters (tags, favorites, name) applied in browser.
 - **Hub + sides model** — `hub.html` is the entry point; each side (Images, Videos, …) is a self-contained set of pages. The shared navbar only contains Organize; side-switching always goes through the hub.
-- **Tag sidebar** — reusable `createTagSidebar()` factory used on home, category, videos, and search pages.
+- **Tag sidebar** — reusable `createTagSidebar()` factory used on all main pages; accepts a `type` param so each side filters its own tags.
 - **Context menu system** — centralized right-click handler with category picker modal for file operations.
 - **Path traversal protection** — all file operations validated with `path.resolve()`.
 - **Hidden categories** — `recycle-bin` folder excluded from UI via `HIDDEN_CATEGORIES` set in `scanner.js`.
@@ -147,6 +159,7 @@ img-view/
 │   ├── routes/
 │   │   ├── categories.js           # GET/POST image categories; GET with sort/filter
 │   │   ├── videos.js               # GET/POST video categories; GET videos by category
+│   │   ├── audio.js                # GET/POST audio categories; GET tracks by category; GET random
 │   │   ├── tags.js                 # Tag CRUD (individual, batch-add, all-tags with counts)
 │   │   ├── search.js               # Cross-category search by filename + tag
 │   │   ├── random.js               # Random image/video (category/tag/exclude filters)
@@ -155,7 +168,7 @@ img-view/
 │   │   ├── recycle.js              # Recycle bin (move, restore, delete permanently)
 │   │   └── open.js                 # Windows "Open With" dialog
 │   └── utils/
-│       ├── scanner.js              # Filesystem scanning (categories, images, videos, loose files)
+│       ├── scanner.js              # Filesystem scanning (categories, images, videos, audio, loose files)
 │       ├── thumbnails.js           # Sharp thumbnail generation and caching
 │       └── db.js                   # SQLite connection, migrations, seed-from-JSON, shared helpers
 ├── client/
@@ -167,6 +180,7 @@ img-view/
 │   │   ├── image.html              # Image viewer (zoom/pan, nav, slideshow, tags)
 │   │   ├── videos.html             # Videos side — category grid + video list
 │   │   ├── video.html              # Video player with sidebar and tags
+│   │   ├── audio.html              # Audio side — category grid + track list + player bar
 │   │   └── search.html             # Global search results
 │   ├── css/
 │   │   ├── base.css                # Reset, layout, shared components
@@ -181,6 +195,7 @@ img-view/
 │       ├── image.js                # Image viewer (zoom/pan, nav, slideshow, keyboard)
 │       ├── videos.js               # Videos page (category grid + video list)
 │       ├── video.js                # Video player (playback, nav, sidebar, tags, keyboard)
+│       ├── audio.js                # Audio page (category grid, track list, player bar, tags, keyboard)
 │       ├── search.js               # Search results page
 │       ├── theme.js                # Theme cycling + localStorage persistence
 │       ├── context-menu.js         # Right-click menu system + category picker modal
@@ -192,6 +207,7 @@ img-view/
 │   # automatically on first run if present, then can be deleted.
 ├── images/                         # Image library (subfolders = categories; do not commit)
 ├── videos/                         # Video library (subfolders = categories; do not commit)
+├── audio/                          # Audio library (subfolders = categories; do not commit)
 ├── thumbnails/                     # Auto-generated thumbnails (do not commit)
 ├── package.json
 ├── package-lock.json
@@ -218,10 +234,18 @@ img-view/
 | POST   | `/api/videos/categories`             | Create a new video category             |
 | GET    | `/api/videos/:name`                  | Videos in category (sort/order)         |
 
+### Audio
+| Method | Endpoint                              | Description                             |
+|--------|---------------------------------------|-----------------------------------------|
+| GET    | `/api/audio/categories`              | List all audio categories               |
+| POST   | `/api/audio/categories`              | Create a new audio category             |
+| GET    | `/api/audio/random`                  | Random track (category/exclude filters) |
+| GET    | `/api/audio/:name`                   | Tracks in category (sort/order)         |
+
 ### Tags
 | Method | Endpoint                              | Description                             |
 |--------|---------------------------------------|-----------------------------------------|
-| GET    | `/api/tags?type=image\|video`         | Full tags map                           |
+| GET    | `/api/tags?type=image\|video\|audio`  | Full tags map                           |
 | GET    | `/api/tags/all?category=&type=`       | Sorted tag list with counts             |
 | GET    | `/api/tags/:category/:filename`       | Tags for one file                       |
 | POST   | `/api/tags/:category/:filename`       | Set tags for one file                   |
@@ -238,6 +262,7 @@ img-view/
 |--------|---------------------------------------|-----------------------------------------|
 | GET    | `/api/random?category=&tag=&exclude=` | Random image                            |
 | GET    | `/api/random/video?category=&exclude=`| Random video                            |
+| GET    | `/api/audio/random?category=&exclude=`| Random audio track                      |
 
 ### Files
 | Method | Endpoint                              | Description                             |
@@ -257,7 +282,7 @@ img-view/
 | Method | Endpoint                              | Description                             |
 |--------|---------------------------------------|-----------------------------------------|
 | GET    | `/api/favorites`                      | Full favorites map                      |
-| POST   | `/api/favorites/:category/:filename`  | Toggle favorite                         |
+| POST   | `/api/favorites/:category/:filename`  | Toggle favorite (`?type=image\|video\|audio`) |
 
 ### Recycle Bin
 | Method | Endpoint                              | Description                             |
@@ -265,7 +290,7 @@ img-view/
 | GET    | `/api/recycle`                        | List files in recycle bin               |
 | POST   | `/api/recycle/:category/:filename`    | Move file to recycle bin                |
 | DELETE | `/api/recycle/:filename`              | Permanently delete from recycle bin     |
-| POST   | `/api/recycle/restore/:filename`      | Restore to loose-images                 |
+| POST   | `/api/recycle/restore/:filename`      | Restore to loose folder (`?type=image\|video\|audio`) |
 
 ### Open With
 | Method | Endpoint                              | Description                             |
@@ -277,4 +302,5 @@ img-view/
 |------------------------------------|------------------------------------------|
 | `/images/:category/:filename`      | Serve full-resolution image              |
 | `/videos/:category/:filename`      | Serve video file                         |
+| `/audio/:category/:filename`       | Serve audio file                         |
 | `/thumbnails/:category/:filename`  | Serve cached WebP thumbnail              |

@@ -1,6 +1,6 @@
 # img-view
 
-A local media manager. Drop your files into category folders, start the server, and browse at `localhost:2080`. Organised into **sides** — Images, Videos, with Audio and Text-Writer planned — all accessible from a central hub. Built with Node.js + Express and vanilla HTML/CSS/JS — no build step, runs fully offline.
+A local media manager. Drop your files into category folders, start the server, and browse at `localhost:2080`. Organised into **sides** — Images, Videos, Audio, with Text-Writer planned — all accessible from a central hub. Built with Node.js + Express and vanilla HTML/CSS/JS — no build step, runs fully offline.
 
 ---
 
@@ -37,20 +37,24 @@ npm run dev
 ```
 img-view/
 ├── images/
-│   ├── category-name/
-│   │   ├── photo.jpg
-│   │   └── ...
-│   └── another-category/
-└── videos/
+│   └── category-name/
+│       ├── photo.jpg
+│       └── ...
+├── videos/
+│   └── category-name/
+│       ├── clip.mp4
+│       └── ...
+└── audio/
     └── category-name/
-        ├── clip.mp4
+        ├── song.mp3
         └── ...
 ```
 
-- Each subfolder inside `images/` or `videos/` becomes a **category**.
+- Each subfolder inside `images/`, `videos/`, or `audio/` becomes a **category**.
 - Supported image formats: JPG, JPEG, PNG, GIF, WebP, SVG, AVIF
 - Supported video formats: MP4, WebM
-- Loose files dropped directly into `images/` or `videos/` can be auto-organized from the home page.
+- Supported audio formats: MP3, FLAC, OGG, WAV, M4A, AAC, OPUS
+- Loose files dropped directly into `images/` or `videos/` can be auto-organized from the navbar.
 
 ---
 
@@ -59,8 +63,8 @@ img-view/
 ### Navigation
 - Central **hub page** (`/pages/hub.html`) with a card for each side of the app
 - Logo in every page links back to the hub
-- Sides currently available: **Images**, **Videos**
-- Sides planned: **Audio**, **Text-Writer**
+- Sides currently available: **Images**, **Videos**, **Audio**
+- Sides planned: **Text-Writer**
 
 ### Image browsing
 - Category grid on the home page with cover thumbnails
@@ -94,11 +98,19 @@ img-view/
 - Recycle bin button
 - Open With button
 
+### Audio
+- Category grid → track list with a persistent player bar at the bottom of the page
+- Play/pause, previous/next, seek, volume, mute
+- Auto-advances to the next track on playback end
+- Favorites and tag editing from the player bar
+- Recycle bin support
+- Supported formats: MP3, FLAC, OGG, WAV, M4A, AAC, OPUS
+
 ### Tagging
 - Tags stored in `data/imgview.db` (SQLite) — survive moves and renames
-- Unified tag picker in both image and video viewers: current tags + searchable chip picker for all existing tags + "+ New tag"
+- Unified tag picker in image, video, and audio — current tags + searchable chip picker + "+ New tag"
 - Batch-add a tag to multiple files at once
-- Tag sidebar on home and category pages: filter by tag, sort by name or count, count badges
+- Tag sidebar on all main pages: filter by tag, sort by name or count, count badges
 - `#tagname` syntax in the search bar for inline tag filtering
 
 ### Search
@@ -107,10 +119,9 @@ img-view/
 - Results grouped into Images and Categories tabs
 
 ### Favorites & Recycle bin
-- Star any image or video; favorites stored in `data/imgview.db`
-- Filter category view or home grid to show only favorites
-- Image recycle bin: `images/recycle-bin/` — restore or permanently delete from the UI
-- Video recycle bin: `videos/recycle-bin/` — same restore/delete UI
+- Star any image, video, or audio track; favorites stored in `data/imgview.db`
+- Filter by favorites on each side
+- Recycle bins: `images/recycle-bin/`, `videos/recycle-bin/`, `audio/recycle-bin/` — restore or permanently delete from the UI
 - Favorited files are protected from accidental recycling
 
 ### File operations
@@ -156,6 +167,14 @@ img-view/
 | `+` / `-` | Zoom in / out |
 | `0` | Reset zoom |
 | `Backspace` | Go back |
+
+### Audio player
+| Key | Action |
+|-----|--------|
+| `Space` | Play / Pause |
+| `Alt+←` | Previous track |
+| `Alt+→` | Next track |
+| `M` | Mute toggle |
 
 ---
 
