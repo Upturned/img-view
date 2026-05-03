@@ -4,9 +4,11 @@ const path = require('path');
 const ROOT = path.join(__dirname, '../../');
 const IMAGES_DIR = path.join(ROOT, 'images');
 const VIDEOS_DIR = path.join(ROOT, 'videos');
+const AUDIO_DIR  = path.join(ROOT, 'audio');
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.avif']);
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm']);
+const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.ogg', '.wav', '.m4a', '.aac', '.opus']);
 
 // Folders inside /images that should never surface as user-facing categories
 const HIDDEN_CATEGORIES = new Set(['recycle-bin']);
@@ -17,6 +19,10 @@ function isImage(filename) {
 
 function isVideo(filename) {
   return VIDEO_EXTENSIONS.has(path.extname(filename).toLowerCase());
+}
+
+function isAudio(filename) {
+  return AUDIO_EXTENSIONS.has(path.extname(filename).toLowerCase());
 }
 
 function getFileInfo(filePath, category, type) {
@@ -273,8 +279,47 @@ function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+function scanAudioCategories() {
+  ensureDir(AUDIO_DIR);
+  const entries = fs.readdirSync(AUDIO_DIR, { withFileTypes: true });
+  const categories = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (HIDDEN_CATEGORIES.has(entry.name)) continue;
+    const categoryPath = path.join(AUDIO_DIR, entry.name);
+    const files = fs.readdirSync(categoryPath).filter(isAudio);
+    categories.push({ name: entry.name, trackCount: files.length });
+  }
+  return categories;
+}
+
+function scanAudioCategory(categoryName) {
+  const categoryPath = path.join(AUDIO_DIR, categoryName);
+  if (!fs.existsSync(categoryPath)) return null;
+  const files = fs.readdirSync(categoryPath).filter(isAudio);
+  return files.map(filename =>
+    getFileInfo(path.join(categoryPath, filename), categoryName, 'audio')
+  );
+}
+
+function scanAllAudio() {
+  ensureDir(AUDIO_DIR);
+  const entries = fs.readdirSync(AUDIO_DIR, { withFileTypes: true });
+  const all = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (HIDDEN_CATEGORIES.has(entry.name)) continue;
+    const categoryPath = path.join(AUDIO_DIR, entry.name);
+    for (const filename of fs.readdirSync(categoryPath).filter(isAudio)) {
+      all.push(getFileInfo(path.join(categoryPath, filename), entry.name, 'audio'));
+    }
+  }
+  return all;
+}
+
 function getImagesDir() { return IMAGES_DIR; }
 function getVideosDir() { return VIDEOS_DIR; }
+function getAudioDir()  { return AUDIO_DIR; }
 
 module.exports = {
   scanCategories,
@@ -282,11 +327,16 @@ module.exports = {
   scanVideoCategories,
   scanVideoCategory,
   scanAllImages,
+  scanAudioCategories,
+  scanAudioCategory,
+  scanAllAudio,
   scanLooseFiles,
   organizeLooseFiles,
   organizeDeep,
   getImagesDir,
   getVideosDir,
+  getAudioDir,
   isImage,
   isVideo,
+  isAudio,
 };

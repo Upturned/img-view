@@ -12,14 +12,17 @@ const { db } = require("../utils/db");
 function openFilePicker(type) {
   const imageExts = "*.jpg;*.jpeg;*.png;*.gif;*.webp;*.svg;*.avif";
   const videoExts = "*.mp4;*.webm";
+  const audioExts = "*.mp3;*.flac;*.ogg;*.wav;*.m4a;*.aac;*.opus";
 
   const filter =
-    type === "video"
-      ? `Video files|${videoExts}|All files|*.*`
-      : `Image files|${imageExts}|All files|*.*`;
+    type === "video" ? `Video files|${videoExts}|All files|*.*` :
+    type === "audio" ? `Audio files|${audioExts}|All files|*.*` :
+                      `Image files|${imageExts}|All files|*.*`;
 
   const title =
-    type === "video" ? "Select a video file" : "Select an image file";
+    type === "video" ? "Select a video file" :
+    type === "audio" ? "Select an audio file" :
+                      "Select an image file";
 
   // TopMost form keeps the dialog in front of the browser window
   const script = [
@@ -55,7 +58,9 @@ function safeResolve(baseDir, category, filename) {
 }
 
 function baseDir(type) {
-  return type === "video" ? scanner.getVideosDir() : scanner.getImagesDir();
+  if (type === "video") return scanner.getVideosDir();
+  if (type === "audio") return scanner.getAudioDir();
+  return scanner.getImagesDir();
 }
 
 // POST /api/files/move

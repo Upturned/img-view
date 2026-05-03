@@ -12,14 +12,16 @@ app.use(express.json());
 // --- Static: client files ---
 app.use(express.static(path.join(__dirname, '../client')));
 
-// --- Static: images, videos, thumbnails ---
-app.use('/images', express.static(path.join(__dirname, '../images')));
-app.use('/videos', express.static(path.join(__dirname, '../videos')));
+// --- Static: images, videos, audio, thumbnails ---
+app.use('/images',     express.static(path.join(__dirname, '../images')));
+app.use('/videos',     express.static(path.join(__dirname, '../videos')));
+app.use('/audio',      express.static(path.join(__dirname, '../audio')));
 app.use('/thumbnails', express.static(getThumbnailsDir()));
 
 // --- API Routes ---
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/videos',     require('./routes/videos'));
+app.use('/api/audio',      require('./routes/audio'));
 app.use('/api/tags',       require('./routes/tags'));
 app.use('/api/search',     require('./routes/search'));
 app.use('/api/random',     require('./routes/random'));

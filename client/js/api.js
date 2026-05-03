@@ -19,6 +19,23 @@ const api = {
     return apiFetch(`/api/categories/${encodeURIComponent(name)}${q ? '?' + q : ''}`);
   },
 
+  // --- Audio ---
+  getAudioCategories: () => apiFetch('/api/audio/categories'),
+  createAudioCategory: (name) => apiFetch('/api/audio/categories', { method: 'POST', body: JSON.stringify({ name }) }),
+  getAudioTracks: (name, params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/api/audio/${encodeURIComponent(name)}${q ? '?' + q : ''}`);
+  },
+  getRandomAudio: (opts = {}) => {
+    const params = new URLSearchParams();
+    if (opts.category) params.set('category', opts.category);
+    if (opts.exclude)  params.set('exclude', opts.exclude);
+    const q = params.toString();
+    return apiFetch(`/api/audio/random${q ? '?' + q : ''}`);
+  },
+  recycleAudio: (category, filename) =>
+    apiFetch(`/api/recycle/${encodeURIComponent(category)}/${encodeURIComponent(filename)}?type=audio`, { method: 'POST' }),
+
   // --- Videos ---
   getVideoCategories: () => apiFetch('/api/videos/categories'),
   createVideoCategory: (name) => apiFetch('/api/videos/categories', { method: 'POST', body: JSON.stringify({ name }) }),
@@ -50,8 +67,8 @@ const api = {
 
   // --- Favorites ---
   getFavorites: () => apiFetch('/api/favorites'),
-  toggleFavorite: (category, filename) =>
-    apiFetch(`/api/favorites/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`, { method: 'POST' }),
+  toggleFavorite: (category, filename, type = 'image') =>
+    apiFetch(`/api/favorites/${encodeURIComponent(category)}/${encodeURIComponent(filename)}?type=${type}`, { method: 'POST' }),
 
   // --- Recycle bin ---
   recycleImage: (category, filename) =>
@@ -152,6 +169,10 @@ function imageUrl(category, filename) {
 
 function videoUrl(category, filename) {
   return `/videos/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`;
+}
+
+function audioUrl(category, filename) {
+  return `/audio/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`;
 }
 
 // --- Page navigation ---
