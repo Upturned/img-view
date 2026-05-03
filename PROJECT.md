@@ -2,7 +2,8 @@
 
 ## Overview
 
-A local image and video manager running as a Node.js + Express server with a plain HTML/CSS/JS frontend.
+A local media manager running as a Node.js + Express server with a plain HTML/CSS/JS frontend.
+Organised into **sides** (Images, Videos, with Audio and Text-Writer planned), each accessible from a central hub page.
 Designed for offline, desktop-only use. No internet connection required at runtime. No build step.
 
 ---
@@ -18,6 +19,12 @@ Designed for offline, desktop-only use. No internet connection required at runti
 - Windows file picker for manually adding files to a category.
 - Move, copy, rename (single and bulk) between categories.
 - Recycle bin: moves files to a hidden folder; restore or delete permanently from UI.
+
+### Navigation model
+- The app is divided into **sides**: Images, Videos, Audio (planned), Text-Writer (planned).
+- `/pages/hub.html` is the entry point — a card grid with one card per side.
+- The logo in every page navbar links back to the hub.
+- Each side owns its own pages, routes, and data. The shared navbar (`navbar.js`) only contains the Organize button; side-switching happens through the hub.
 
 ### Themes & UI
 - Desktop only — no mobile/responsive requirement.
@@ -41,8 +48,8 @@ Designed for offline, desktop-only use. No internet connection required at runti
 - Tag filtering uses AND logic for multiple tags.
 
 ### Tags
-- Stored separately: `data/tags-images.json` and `data/tags-videos.json`.
-- Key format: `"category/filename": ["tag1", "tag2"]`.
+- Stored in `data/imgview.db` (SQLite, `file_tags` + `tags` tables).
+- Tags survive file moves and renames — the DB row is updated atomically with the disk operation.
 - Add, remove, and search tags inline in the image/video viewer.
 - Batch-add: apply one tag to multiple files at once.
 - Tag sidebar on home, category, videos, and search pages — search chips, sort by name or count, count badges.
@@ -53,10 +60,10 @@ Designed for offline, desktop-only use. No internet connection required at runti
 - Adjustable column count (2–10); persists via localStorage.
 
 ### Favorites
-- Toggle star on any image; persists in `data/favorites.json`.
+- Toggle star on any image or video; stored in `data/imgview.db` (`files.favorited` column).
 - Favorites filter on home page and category toolbar.
 - Star badge (★) on favorited cards.
-- Favorited images are protected from accidental recycling.
+- Favorited files (any type) are protected from accidental recycling.
 
 ### Image Viewer
 - Default: natural size, fit-to-screen if image exceeds viewport.
@@ -116,13 +123,14 @@ Designed for offline, desktop-only use. No internet connection required at runti
 | Backend    | Node.js + Express | Local filesystem access, thumbnail gen, open-with   |
 | Frontend   | HTML + CSS + JS   | No build step, no framework overhead                |
 | Thumbnails | `sharp`           | Fast, offline, battle-tested                        |
-| Data       | JSON files        | Zero dependencies, human-readable                   |
+| Data       | SQLite (`better-sqlite3`) | Single file, transactional writes, survives moves |
 | Language   | JavaScript        | No TypeScript build step needed at this scale       |
 
 ### Notable patterns
-- **Stateless server** — no in-memory state; all data lives on disk as JSON + media files.
+- **Stateless server** — no in-memory state; metadata lives in `data/imgview.db`, media files on disk.
 - **sessionStorage for navigation** — image/video lists stored in sessionStorage to preserve sort order across page transitions.
 - **Client-side filtering** — server returns sorted list; filters (tags, favorites, name) applied in browser.
+- **Hub + sides model** — `hub.html` is the entry point; each side (Images, Videos, …) is a self-contained set of pages. The shared navbar only contains Organize; side-switching always goes through the hub.
 - **Tag sidebar** — reusable `createTagSidebar()` factory used on home, category, videos, and search pages.
 - **Context menu system** — centralized right-click handler with category picker modal for file operations.
 - **Path traversal protection** — all file operations validated with `path.resolve()`.
@@ -148,14 +156,16 @@ img-view/
 │   │   └── open.js                 # Windows "Open With" dialog
 │   └── utils/
 │       ├── scanner.js              # Filesystem scanning (categories, images, videos, loose files)
-│       └── thumbnails.js           # Sharp thumbnail generation and caching
+│       ├── thumbnails.js           # Sharp thumbnail generation and caching
+│       └── db.js                   # SQLite connection, migrations, seed-from-JSON, shared helpers
 ├── client/
-│   ├── index.html                  # Redirect to /pages/home.html
+│   ├── index.html                  # Redirect to /pages/hub.html
 │   ├── pages/
-│   │   ├── home.html               # Category grid, search, favorites, recycle bin modal
+│   │   ├── hub.html                # Entry point — side selector (Images, Videos, Audio, Text-Writer)
+│   │   ├── home.html               # Images side — category grid, search, favorites, recycle bin modal
 │   │   ├── category.html           # Image grid with sort, filter, size slider
 │   │   ├── image.html              # Image viewer (zoom/pan, nav, slideshow, tags)
-│   │   ├── videos.html             # Video category grid + video list
+│   │   ├── videos.html             # Videos side — category grid + video list
 │   │   ├── video.html              # Video player with sidebar and tags
 │   │   └── search.html             # Global search results
 │   ├── css/
@@ -175,11 +185,11 @@ img-view/
 │       ├── theme.js                # Theme cycling + localStorage persistence
 │       ├── context-menu.js         # Right-click menu system + category picker modal
 │       ├── tag-sidebar.js          # Reusable tag sidebar component
-│       └── navbar.js               # Navbar buttons
+│       └── navbar.js               # Shared navbar — Organize button (included on every page)
 ├── data/
-│   ├── favorites.json              # { "category/filename": true }
-│   ├── tags-images.json            # { "category/filename": ["tag1", ...] }
-│   └── tags-videos.json            # Same structure for videos
+│   └── imgview.db                  # SQLite database — tags, favorites, file metadata (do not commit)
+│   # Legacy JSON files (tags-images.json, tags-videos.json, favorites.json) are imported
+│   # automatically on first run if present, then can be deleted.
 ├── images/                         # Image library (subfolders = categories; do not commit)
 ├── videos/                         # Video library (subfolders = categories; do not commit)
 ├── thumbnails/                     # Auto-generated thumbnails (do not commit)

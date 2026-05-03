@@ -1,6 +1,6 @@
 # img-view
 
-A local image and video manager. Drop your files into category folders, start the server, and browse at `localhost:2080`. Built with Node.js + Express and vanilla HTML/CSS/JS — no build step, no external deps, runs fully offline.
+A local media manager. Drop your files into category folders, start the server, and browse at `localhost:2080`. Organised into **sides** — Images, Videos, with Audio and Text-Writer planned — all accessible from a central hub. Built with Node.js + Express and vanilla HTML/CSS/JS — no build step, runs fully offline.
 
 ---
 
@@ -56,6 +56,12 @@ img-view/
 
 ## Features
 
+### Navigation
+- Central **hub page** (`/pages/hub.html`) with a card for each side of the app
+- Logo in every page links back to the hub
+- Sides currently available: **Images**, **Videos**
+- Sides planned: **Audio**, **Text-Writer**
+
 ### Image browsing
 - Category grid on the home page with cover thumbnails
 - Lazy-loaded image grid with adjustable column count (2–10), persisted across sessions
@@ -89,7 +95,7 @@ img-view/
 - Open With button
 
 ### Tagging
-- Tags stored in `data/tags-images.json` and `data/tags-videos.json`
+- Tags stored in `data/imgview.db` (SQLite) — survive moves and renames
 - Unified tag picker in both image and video viewers: current tags + searchable chip picker for all existing tags + "+ New tag"
 - Batch-add a tag to multiple files at once
 - Tag sidebar on home and category pages: filter by tag, sort by name or count, count badges
@@ -101,11 +107,11 @@ img-view/
 - Results grouped into Images and Categories tabs
 
 ### Favorites & Recycle bin
-- Star any image; favorites persist in `data/favorites.json`
+- Star any image or video; favorites stored in `data/imgview.db`
 - Filter category view or home grid to show only favorites
 - Image recycle bin: `images/recycle-bin/` — restore or permanently delete from the UI
 - Video recycle bin: `videos/recycle-bin/` — same restore/delete UI
-- Favorited images are protected from accidental recycling
+- Favorited files are protected from accidental recycling
 
 ### File operations
 - Move, copy, or rename files between categories (single and bulk)
@@ -153,12 +159,14 @@ img-view/
 
 ---
 
-## Data files
+## Data
+
+All persistent metadata (tags, favorites) is stored in a local SQLite database:
 
 | File | Contents |
 |------|----------|
-| `data/favorites.json` | `{ "category/filename": true }` |
-| `data/tags-images.json` | `{ "category/filename": ["tag1", "tag2"] }` |
-| `data/tags-videos.json` | Same structure for videos |
+| `data/imgview.db` | Tags, favorites, and file metadata |
 
-These are excluded from git by default. `thumbnails/` and `images/` are also gitignored.
+The database is created automatically on first run. If you have an existing install with the old JSON files (`data/tags-images.json`, `data/tags-videos.json`, `data/favorites.json`), they are imported into the database automatically on first startup and can then be deleted.
+
+All files under `data/`, `thumbnails/`, and `images/` are excluded from git.

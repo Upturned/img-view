@@ -4,16 +4,12 @@ const path = require('path');
 const router = express.Router();
 const { thumbPath } = require('../utils/thumbnails');
 const scanner = require('../utils/scanner');
+const { db } = require('../utils/db');
 
 const IMAGES_DIR = scanner.getImagesDir();
 const VIDEOS_DIR = scanner.getVideosDir();
 const IMAGE_RECYCLE_DIR = path.join(IMAGES_DIR, 'recycle-bin');
 const VIDEO_RECYCLE_DIR = path.join(VIDEOS_DIR, 'recycle-bin');
-const FAVORITES_PATH = path.join(__dirname, '../../data/favorites.json');
-
-function loadFavorites() {
-  try { return JSON.parse(fs.readFileSync(FAVORITES_PATH, 'utf8')); } catch { return {}; }
-}
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -58,12 +54,10 @@ router.post('/:category/:filename', (req, res) => {
   const { category, filename } = req.params;
   const key = `${category}/${filename}`;
 
-  // Only check favorites for images (videos don't have favorites yet)
-  if (type === 'image') {
-    const favorites = loadFavorites();
-    if (favorites[key]) {
-      return res.status(409).json({ error: 'Cannot recycle a favorited image. Remove the favorite first.' });
-    }
+  const fileRow = db.prepare('SELECT favorited FROM files WHERE type = ? AND category = ? AND filename = ?')
+                    .get(type, category, filename);
+  if (fileRow?.favorited) {
+    return res.status(409).json({ error: 'Cannot recycle a favorited file. Remove the favorite first.' });
   }
 
   const sourceDir  = type === 'video' ? VIDEOS_DIR : IMAGES_DIR;

@@ -5,6 +5,7 @@ const { execSync } = require("child_process");
 const router = express.Router();
 const scanner = require("../utils/scanner");
 const { thumbPath, cleanStaleThumbs, generateCategoryThumbs } = require("../utils/thumbnails");
+const { db } = require("../utils/db");
 
 // ── File picker via PowerShell native dialog ──
 // Opens a Windows OpenFileDialog and returns the chosen path, or null if cancelled.
@@ -99,6 +100,14 @@ router.post("/move", (req, res) => {
         try { fs.renameSync(oldThumb, newThumb); } catch { /* non-critical */ }
       }
     }
+
+    // Update DB path so tags and favorites follow the move
+    try {
+      db.prepare(`
+        UPDATE files SET category = ?, path = ?
+        WHERE type = ? AND category = ? AND filename = ?
+      `).run(toCategory, `${toCategory}/${filename}`, type, fromCategory, filename);
+    } catch { /* non-critical */ }
 
     res.json({ message: "File moved.", to: `${toCategory}/${filename}` });
   } catch (err) {
@@ -277,6 +286,13 @@ router.post("/move-bulk", (req, res) => {
           try { fs.renameSync(oldThumb, newThumb); } catch { /* non-critical */ }
         }
       }
+
+      try {
+        db.prepare(`
+          UPDATE files SET category = ?, path = ?
+          WHERE type = ? AND category = ? AND filename = ?
+        `).run(toCategory, `${toCategory}/${filename}`, type, fromCategory, filename);
+      } catch { /* non-critical */ }
     } catch (err) {
       errors.push({ filename, error: err.message });
     }
@@ -375,20 +391,13 @@ router.post("/rename", (req, res) => {
     }
   }
 
-  // Update tags.json — the key is "category/filename", so it changes
-  const tagsPath = path.join(__dirname, "../../data/tags.json");
+  // Update DB path so tags and favorites follow the rename
   try {
-    const tags = JSON.parse(fs.readFileSync(tagsPath, "utf8"));
-    const oldKey = `${category}/${oldFilename}`;
-    const newKey = `${category}/${safeName}`;
-    if (tags[oldKey]) {
-      tags[newKey] = tags[oldKey];
-      delete tags[oldKey];
-      fs.writeFileSync(tagsPath, JSON.stringify(tags, null, 2), "utf8");
-    }
-  } catch {
-    /* tags are non-critical, keep going */
-  }
+    db.prepare(`
+      UPDATE files SET filename = ?, path = ?, extension = ?
+      WHERE type = ? AND category = ? AND filename = ?
+    `).run(safeName, `${category}/${safeName}`, path.extname(safeName).toLowerCase(), type, category, oldFilename);
+  } catch { /* non-critical */ }
 
   res.json({ filename: safeName, category });
 });

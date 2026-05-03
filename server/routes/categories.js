@@ -4,6 +4,7 @@ const path = require('path');
 const router = express.Router();
 const scanner = require('../utils/scanner');
 const { generateCategoryThumbs } = require('../utils/thumbnails');
+const { db } = require('../utils/db');
 
 // GET /api/categories
 // Returns all image categories with cover image and count
@@ -64,12 +65,15 @@ router.get('/:name', (req, res) => {
 
   // Tag filter
   if (tag) {
-    const tagsData = loadTags();
-    result = result.filter(img => {
-      const key = `${img.category}/${img.filename}`;
-      const tags = tagsData[key] || [];
-      return tags.includes(tag);
-    });
+    const tagged = new Set(
+      db.prepare(`
+        SELECT f.filename FROM file_tags ft
+        JOIN files f ON f.id = ft.file_id
+        JOIN tags  t ON t.id = ft.tag_id
+        WHERE f.type = 'image' AND f.category = ? AND t.name = ?
+      `).all(name, tag.toLowerCase()).map(r => r.filename)
+    );
+    result = result.filter(img => tagged.has(img.filename));
   }
 
   // Sort
@@ -96,15 +100,6 @@ router.post('/:name/thumbnails', (req, res) => {
   );
   res.json({ message: `Thumbnail generation started for "${name}".` });
 });
-
-function loadTags() {
-  const tagsPath = path.join(__dirname, '../../data/tags.json');
-  try {
-    return JSON.parse(fs.readFileSync(tagsPath, 'utf8'));
-  } catch {
-    return {};
-  }
-}
 
 function shuffled(arr) {
   const a = [...arr];

@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+require('./utils/db');
 const { generateAllThumbs, getThumbnailsDir } = require('./utils/thumbnails');
 
 const app = express();
