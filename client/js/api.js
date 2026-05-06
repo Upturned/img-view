@@ -82,12 +82,14 @@ const api = {
     apiFetch(`/api/recycle/restore/${encodeURIComponent(filename)}?type=${type}`, { method: 'POST' }),
 
   // --- Search ---
-  // tags can be a string (single) or an array of strings (multi, AND logic)
-  search: (q, type = 'all', tags = []) => {
+  // tagFilter: { include?: string[], exclude?: string[], require?: string[] }
+  //   include = any of these (OR), exclude = none of these, require = all of these (AND)
+  search: (q, type = 'all', tagFilter = {}) => {
     const params = new URLSearchParams({ q, type });
-    const tagList = Array.isArray(tags) ? tags.filter(Boolean) : (tags ? [tags] : []);
-    if (tagList.length === 1) params.set('tag', tagList[0]);
-    else if (tagList.length > 1) params.set('tags', tagList.join(','));
+    const { include = [], exclude = [], require: req = [] } = tagFilter;
+    if (include.length > 0) params.set('include', include.join(','));
+    if (exclude.length > 0) params.set('exclude', exclude.join(','));
+    if (req.length > 0) params.set('require', req.join(','));
     return apiFetch(`/api/search?${params}`);
   },
 
