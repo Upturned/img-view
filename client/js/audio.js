@@ -7,7 +7,7 @@ let allTracks       = [];
 let displayTracks   = [];
 let audioTagsMap    = {};
 let favoritesMap    = {};
-let activeTags      = [];
+let activeTagFilter = { include: [], exclude: [], require: [] };
 let sortOrder       = 'asc';
 let favoritesMode   = false;
 
@@ -38,7 +38,7 @@ document.getElementById('theme-toggle-btn').addEventListener('click', toggleThem
 // ── Tag sidebar ─────────────────────────────────────────────────────────────
 const tagSidebar = createTagSidebar({
   type: 'audio',
-  onFilterChange: (tags) => { activeTags = tags; applyFilter(); },
+  onFilterChange: (filter) => { activeTagFilter = filter; applyFilter(); },
 });
 
 // ── Tag picker (in player tags panel) ───────────────────────────────────────
@@ -60,21 +60,30 @@ function getFilteredCategories() {
   let cats = [...allCategories];
   const q = searchInput.value.trim().toLowerCase();
   if (q) cats = cats.filter(c => c.name.toLowerCase().includes(q));
-  if (activeTags.length > 0) {
+  const { include, exclude, require } = activeTagFilter;
+  if (include.length > 0 || exclude.length > 0 || require.length > 0) {
     cats = cats.filter(cat =>
-      Object.entries(audioTagsMap).some(([key, tags]) =>
-        key.startsWith(cat.name + '/') && activeTags.every(t => tags.includes(t))
-      )
+      Object.entries(audioTagsMap).some(([key, tags]) => {
+        if (!key.startsWith(cat.name + '/')) return false;
+        if (require.length > 0 && !require.every(t => tags.includes(t))) return false;
+        if (include.length > 0 && !include.some(t => tags.includes(t))) return false;
+        if (exclude.length > 0 &&  exclude.some(t => tags.includes(t))) return false;
+        return true;
+      })
     );
   }
   return cats;
 }
 
 function getFilteredTracks() {
-  if (activeTags.length === 0) return allTracks;
+  const { include, exclude, require } = activeTagFilter;
+  if (include.length === 0 && exclude.length === 0 && require.length === 0) return allTracks;
   return allTracks.filter(t => {
     const tags = audioTagsMap[`${t.category}/${t.filename}`] || [];
-    return activeTags.every(tag => tags.includes(tag));
+    if (require.length > 0 && !require.every(tag => tags.includes(tag))) return false;
+    if (include.length > 0 && !include.some(tag => tags.includes(tag))) return false;
+    if (exclude.length > 0 &&  exclude.some(tag => tags.includes(tag))) return false;
+    return true;
   });
 }
 

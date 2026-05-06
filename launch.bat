@@ -15,10 +15,4 @@ echo  Close the server window to stop.
 echo.
 
 :: Start the Node server in a minimized window (won't block this script)
-start "img-view server" /MIN cmd /c "npm start"
-
-:: Wait for the server to be ready (adjust if your machine is slow)
-timeout /t 3 /nobreak >nul
-
-:: Open the browser
-start http://localhost:%PORT%
+npm start

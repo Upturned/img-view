@@ -2,7 +2,7 @@
 
 let currentCategory = null;
 let sortOrder       = 'asc';
-let activeTags      = [];         // managed by tagSidebar
+let activeTagFilter = { include: [], exclude: [], require: [] };
 let allCategories   = [];
 let allVideos       = [];
 let displayVideos   = [];         // after client-side tag filter
@@ -45,7 +45,7 @@ sizeSlider.addEventListener('input', () => {
 
 const tagSidebar = createTagSidebar({
   type: 'video',
-  onFilterChange: (tags) => { activeTags = tags; applyFilter(); },
+  onFilterChange: (filter) => { activeTagFilter = filter; applyFilter(); },
 });
 
 // ── Filter ──
@@ -62,22 +62,30 @@ function getFilteredCategories() {
   let cats = [...allCategories];
   const q = searchInput.value.trim().toLowerCase();
   if (q) cats = cats.filter(c => c.name.toLowerCase().includes(q));
-  if (activeTags.length > 0) {
+  const { include, exclude, require } = activeTagFilter;
+  if (include.length > 0 || exclude.length > 0 || require.length > 0) {
     cats = cats.filter(cat =>
-      Object.entries(videoTagsMap).some(([key, tags]) =>
-        key.startsWith(cat.name + '/') && activeTags.every(t => tags.includes(t))
-      )
+      Object.entries(videoTagsMap).some(([key, tags]) => {
+        if (!key.startsWith(cat.name + '/')) return false;
+        if (require.length > 0 && !require.every(t => tags.includes(t))) return false;
+        if (include.length > 0 && !include.some(t => tags.includes(t))) return false;
+        if (exclude.length > 0 &&  exclude.some(t => tags.includes(t))) return false;
+        return true;
+      })
     );
   }
   return cats;
 }
 
 function getFilteredVideos() {
-  if (activeTags.length === 0) return allVideos;
+  const { include, exclude, require } = activeTagFilter;
+  if (include.length === 0 && exclude.length === 0 && require.length === 0) return allVideos;
   return allVideos.filter(v => {
-    const key = `${v.category}/${v.filename}`;
-    const tags = videoTagsMap[key] || [];
-    return activeTags.every(t => tags.includes(t));
+    const tags = videoTagsMap[`${v.category}/${v.filename}`] || [];
+    if (require.length > 0 && !require.every(t => tags.includes(t))) return false;
+    if (include.length > 0 && !include.some(t => tags.includes(t))) return false;
+    if (exclude.length > 0 &&  exclude.some(t => tags.includes(t))) return false;
+    return true;
   });
 }
 
