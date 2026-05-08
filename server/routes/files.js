@@ -246,7 +246,7 @@ router.get("/loose", (req, res) => {
   try {
     const loose = scanner.scanLooseFiles();
     const total =
-      loose.images.length + loose.videos.length + loose.others.length;
+      loose.images.length + loose.videos.length + loose.audios.length + loose.others.length;
     res.json({ total, ...loose });
   } catch (err) {
     res.status(500).json({ error: err.message });

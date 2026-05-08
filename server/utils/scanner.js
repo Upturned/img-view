@@ -5,6 +5,7 @@ const ROOT = path.join(__dirname, '../../');
 const IMAGES_DIR = path.join(ROOT, 'images');
 const VIDEOS_DIR = path.join(ROOT, 'videos');
 const AUDIO_DIR  = path.join(ROOT, 'audio');
+const LOOSE_DIR  = path.join(ROOT, 'loose');
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.avif']);
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm']);
@@ -130,19 +131,22 @@ function scanAllImages() {
   return all;
 }
 
-// Detects loose files sitting directly in /images or /videos root (not in any subfolder).
-// Returns { images, videos, others } — each is an array of filenames.
+// Detects loose files sitting directly in /images, /videos, /audio, or /loose root (not in any subfolder).
+// Returns { images, videos, audios, others } — each is an array of filenames.
 function scanLooseFiles() {
   ensureDir(IMAGES_DIR);
   ensureDir(VIDEOS_DIR);
+  ensureDir(AUDIO_DIR);
+  ensureDir(LOOSE_DIR);
 
-  const result = { images: [], videos: [], others: [] };
+  const result = { images: [], videos: [], audios: [], others: [] };
 
   for (const filename of fs.readdirSync(IMAGES_DIR)) {
     const filePath = path.join(IMAGES_DIR, filename);
     if (fs.statSync(filePath).isDirectory()) continue;
     if (isImage(filename)) result.images.push(filename);
     else if (isVideo(filename)) result.videos.push(filename);
+    else if (isAudio(filename)) result.audios.push(filename);
     else result.others.push(filename);
   }
 
@@ -151,30 +155,60 @@ function scanLooseFiles() {
     if (fs.statSync(filePath).isDirectory()) continue;
     if (isVideo(filename)) result.videos.push(filename);
     else if (isImage(filename)) result.images.push(filename);
+    else if (isAudio(filename)) result.audios.push(filename);
+    else result.others.push(filename);
+  }
+
+  for (const filename of fs.readdirSync(AUDIO_DIR)) {
+    const filePath = path.join(AUDIO_DIR, filename);
+    if (fs.statSync(filePath).isDirectory()) continue;
+    if (isAudio(filename)) result.audios.push(filename);
+    else if (isImage(filename)) result.images.push(filename);
+    else if (isVideo(filename)) result.videos.push(filename);
+    else result.others.push(filename);
+  }
+
+  for (const filename of fs.readdirSync(LOOSE_DIR)) {
+    const filePath = path.join(LOOSE_DIR, filename);
+    if (fs.statSync(filePath).isDirectory()) continue;
+    if (isImage(filename)) result.images.push(filename);
+    else if (isVideo(filename)) result.videos.push(filename);
+    else if (isAudio(filename)) result.audios.push(filename);
     else result.others.push(filename);
   }
 
   return result;
 }
 
-// Moves all loose files into their appropriate holding folders:
-//   /images root  → loose images    → images/loose-images/ (gifs → images/gifs/)
-//   /images root  → loose videos    → videos/loose-videos/
-//   /images root  → unknown files   → images/loose-files/
-//   /videos root  → loose videos    → videos/loose-videos/
-//   /videos root  → loose images    → images/loose-images/ (gifs → images/gifs/)
-//   /videos root  → unknown files   → videos/loose-files/
-//   images/loose-images/ → any gifs → images/gifs/
+// Moves all loose files into their appropriate holding folders.
+// Media-root passes (files sitting directly in images/, videos/, audio/):
+//   image  → images/loose-images/ (gifs → images/gifs/)
+//   video  → videos/loose-videos/
+//   audio  → audio/loose-audio/
+//   other  → <same-root>/loose-files/
+// Drop-zone pass (anything dropped in /loose):
+//   image  → images/loose-images/ (gifs → images/gifs/)
+//   video  → videos/loose-videos/
+//   audio  → audio/loose-audio/
+//   other  → stays in loose/ (unrecognised format)
+// Cross-check pass (re-scans each loose holding folder for wrong-type files):
+//   loose-images/ → videos → loose-videos/, audio → loose-audio/, gifs → gifs/
+//   loose-videos/ → images → loose-images/ (gifs → gifs/), audio → loose-audio/
+//   loose-audio/  → images → loose-images/ (gifs → gifs/), videos → loose-videos/
 // Returns a summary of what was moved.
 function organizeLooseFiles() {
   ensureDir(IMAGES_DIR);
   ensureDir(VIDEOS_DIR);
+  ensureDir(AUDIO_DIR);
+  ensureDir(LOOSE_DIR);
 
-  const looseImagesDir = path.join(IMAGES_DIR, 'loose-images');
-  const gifsDir        = path.join(IMAGES_DIR, 'gifs');
-  const looseVideosDir = path.join(VIDEOS_DIR, 'loose-videos');
+  const looseImagesDir   = path.join(IMAGES_DIR, 'loose-images');
+  const gifsDir          = path.join(IMAGES_DIR, 'gifs');
+  const looseVideosDir   = path.join(VIDEOS_DIR, 'loose-videos');
+  const looseAudioDir    = path.join(AUDIO_DIR,  'loose-audio');
   const looseFilesImgDir = path.join(IMAGES_DIR, 'loose-files');
   const looseFilesVidDir = path.join(VIDEOS_DIR, 'loose-files');
+  const looseFilesAudDir = path.join(AUDIO_DIR,  'loose-files');
 
   const moved = [];
 
@@ -184,7 +218,7 @@ function organizeLooseFiles() {
 
   function moveFile(src, destDir, filename) {
     ensureDir(destDir);
-    const dest = path.join(destDir, filename);
+    const dest = uniqueDest(path.join(destDir, filename));
     fs.renameSync(src, dest);
     moved.push({ from: src, to: dest });
   }
@@ -195,16 +229,8 @@ function organizeLooseFiles() {
     if (fs.statSync(filePath).isDirectory()) continue;
     if (isImage(filename)) moveFile(filePath, isGif(filename) ? gifsDir : looseImagesDir, filename);
     else if (isVideo(filename)) moveFile(filePath, looseVideosDir, filename);
+    else if (isAudio(filename)) moveFile(filePath, looseAudioDir, filename);
     else moveFile(filePath, looseFilesImgDir, filename);
-  }
-
-  // GIFs already sitting in loose-images → move them to gifs/
-  if (fs.existsSync(looseImagesDir)) {
-    for (const filename of fs.readdirSync(looseImagesDir)) {
-      const filePath = path.join(looseImagesDir, filename);
-      if (fs.statSync(filePath).isDirectory()) continue;
-      if (isGif(filename)) moveFile(filePath, gifsDir, filename);
-    }
   }
 
   // Loose files in /videos root
@@ -213,22 +239,79 @@ function organizeLooseFiles() {
     if (fs.statSync(filePath).isDirectory()) continue;
     if (isVideo(filename)) moveFile(filePath, looseVideosDir, filename);
     else if (isImage(filename)) moveFile(filePath, isGif(filename) ? gifsDir : looseImagesDir, filename);
+    else if (isAudio(filename)) moveFile(filePath, looseAudioDir, filename);
     else moveFile(filePath, looseFilesVidDir, filename);
+  }
+
+  // Loose files in /audio root
+  for (const filename of fs.readdirSync(AUDIO_DIR)) {
+    const filePath = path.join(AUDIO_DIR, filename);
+    if (fs.statSync(filePath).isDirectory()) continue;
+    if (isAudio(filename)) moveFile(filePath, looseAudioDir, filename);
+    else if (isImage(filename)) moveFile(filePath, isGif(filename) ? gifsDir : looseImagesDir, filename);
+    else if (isVideo(filename)) moveFile(filePath, looseVideosDir, filename);
+    else moveFile(filePath, looseFilesAudDir, filename);
+  }
+
+  // Files dropped in /loose — route to the right holding dir, leave unknowns in place
+  for (const filename of fs.readdirSync(LOOSE_DIR)) {
+    const filePath = path.join(LOOSE_DIR, filename);
+    if (fs.statSync(filePath).isDirectory()) continue;
+    if (isImage(filename)) moveFile(filePath, isGif(filename) ? gifsDir : looseImagesDir, filename);
+    else if (isVideo(filename)) moveFile(filePath, looseVideosDir, filename);
+    else if (isAudio(filename)) moveFile(filePath, looseAudioDir, filename);
+  }
+
+  // Cross-check: loose-images/ for wrong-type files and gifs that need promoting
+  if (fs.existsSync(looseImagesDir)) {
+    for (const filename of fs.readdirSync(looseImagesDir)) {
+      const filePath = path.join(looseImagesDir, filename);
+      if (fs.statSync(filePath).isDirectory()) continue;
+      if (isGif(filename)) moveFile(filePath, gifsDir, filename);
+      else if (isVideo(filename)) moveFile(filePath, looseVideosDir, filename);
+      else if (isAudio(filename)) moveFile(filePath, looseAudioDir, filename);
+    }
+  }
+
+  // Cross-check: loose-videos/ for wrong-type files
+  if (fs.existsSync(looseVideosDir)) {
+    for (const filename of fs.readdirSync(looseVideosDir)) {
+      const filePath = path.join(looseVideosDir, filename);
+      if (fs.statSync(filePath).isDirectory()) continue;
+      if (isImage(filename)) moveFile(filePath, isGif(filename) ? gifsDir : looseImagesDir, filename);
+      else if (isAudio(filename)) moveFile(filePath, looseAudioDir, filename);
+    }
+  }
+
+  // Cross-check: loose-audio/ for wrong-type files
+  if (fs.existsSync(looseAudioDir)) {
+    for (const filename of fs.readdirSync(looseAudioDir)) {
+      const filePath = path.join(looseAudioDir, filename);
+      if (fs.statSync(filePath).isDirectory()) continue;
+      if (isImage(filename)) moveFile(filePath, isGif(filename) ? gifsDir : looseImagesDir, filename);
+      else if (isVideo(filename)) moveFile(filePath, looseVideosDir, filename);
+    }
   }
 
   return moved;
 }
 
 // Deep organize: scans INSIDE every category subfolder for misplaced files.
-// Videos found inside /images/** → moved to videos/loose-videos/
-// Images found inside /videos/** → moved to images/loose-images/
+// Videos found inside /images/**  → moved to videos/loose-videos/
+// Audio  found inside /images/**  → moved to audio/loose-audio/
+// Images found inside /videos/**  → moved to images/loose-images/
+// Audio  found inside /videos/**  → moved to audio/loose-audio/
+// Images found inside /audio/**   → moved to images/loose-images/
+// Videos found inside /audio/**   → moved to videos/loose-videos/
 // Returns summary of moved files.
 function organizeDeep() {
   ensureDir(IMAGES_DIR);
   ensureDir(VIDEOS_DIR);
+  ensureDir(AUDIO_DIR);
 
   const looseVideosDir = path.join(VIDEOS_DIR, 'loose-videos');
   const looseImagesDir = path.join(IMAGES_DIR, 'loose-images');
+  const looseAudioDir  = path.join(AUDIO_DIR,  'loose-audio');
   const moved = [];
 
   function moveFile(src, destDir, filename) {
@@ -240,7 +323,7 @@ function organizeDeep() {
     moved.push({ from: src, to: finalDest });
   }
 
-  // Walk /images/ — find misplaced videos inside any subfolder
+  // Walk /images/ — find misplaced videos and audio inside any subfolder
   for (const entry of fs.readdirSync(IMAGES_DIR, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const catPath = path.join(IMAGES_DIR, entry.name);
@@ -248,10 +331,11 @@ function organizeDeep() {
       const filePath = path.join(catPath, filename);
       if (fs.statSync(filePath).isDirectory()) continue;
       if (isVideo(filename)) moveFile(filePath, looseVideosDir, filename);
+      else if (isAudio(filename)) moveFile(filePath, looseAudioDir, filename);
     }
   }
 
-  // Walk /videos/ — find misplaced images inside any subfolder
+  // Walk /videos/ — find misplaced images and audio inside any subfolder
   for (const entry of fs.readdirSync(VIDEOS_DIR, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const catPath = path.join(VIDEOS_DIR, entry.name);
@@ -259,6 +343,19 @@ function organizeDeep() {
       const filePath = path.join(catPath, filename);
       if (fs.statSync(filePath).isDirectory()) continue;
       if (isImage(filename)) moveFile(filePath, looseImagesDir, filename);
+      else if (isAudio(filename)) moveFile(filePath, looseAudioDir, filename);
+    }
+  }
+
+  // Walk /audio/ — find misplaced images and videos inside any subfolder
+  for (const entry of fs.readdirSync(AUDIO_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const catPath = path.join(AUDIO_DIR, entry.name);
+    for (const filename of fs.readdirSync(catPath)) {
+      const filePath = path.join(catPath, filename);
+      if (fs.statSync(filePath).isDirectory()) continue;
+      if (isImage(filename)) moveFile(filePath, looseImagesDir, filename);
+      else if (isVideo(filename)) moveFile(filePath, looseVideosDir, filename);
     }
   }
 
@@ -320,6 +417,7 @@ function scanAllAudio() {
 function getImagesDir() { return IMAGES_DIR; }
 function getVideosDir() { return VIDEOS_DIR; }
 function getAudioDir()  { return AUDIO_DIR; }
+function getLooseDir()  { return LOOSE_DIR; }
 
 module.exports = {
   scanCategories,
@@ -336,6 +434,7 @@ module.exports = {
   getImagesDir,
   getVideosDir,
   getAudioDir,
+  getLooseDir,
   isImage,
   isVideo,
   isAudio,

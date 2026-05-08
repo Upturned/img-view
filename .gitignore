@@ -5,6 +5,7 @@ images/
 videos/
 audio/
 thumbnail/
+loose/
 data/
 data/*
 bugs.md
