@@ -11,19 +11,23 @@ const resultsEl   = document.getElementById('results');
 let activeTab   = 'all';
 let lastResults = { images: [], categories: [] };
 let searchDebounce = null;
-let activeTags  = new Set();
+let activeTagFilter = new Map();  // tag → 'include' | 'exclude' | 'require'
+
+const TAG_CYCLE  = { 'include': 'exclude', 'exclude': 'require', 'require': '' };
+const TAG_SYMBOL = { 'include': '+', 'exclude': '−', 'require': '✓' };
 
 // ── Theme ──
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
 
 // ── Pre-fill from URL ──
 const initQuery = urlParams.get('q') || '';
-const initTagsParam = urlParams.get('tags') || '';
-const initTag   = urlParams.get('tag') || '';
-const initTagList = initTagsParam ? initTagsParam.split(',').filter(Boolean) : (initTag ? [initTag] : []);
 
-// Put tags into activeTags immediately (sidebar chips will be selected when built)
-initTagList.forEach(t => activeTags.add(t.toLowerCase()));
+function parseUrlTagList(param) {
+  return (urlParams.get(param) || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+}
+parseUrlTagList('include').forEach(t => activeTagFilter.set(t, 'include'));
+parseUrlTagList('exclude').forEach(t => activeTagFilter.set(t, 'exclude'));
+parseUrlTagList('require').forEach(t => activeTagFilter.set(t, 'require'));
 
 // Build display value in the search bar (text only; tags shown in sidebar)
 if (initQuery) {
@@ -33,7 +37,7 @@ if (initQuery) {
 
 // ── Tag sidebar ──
 async function buildTagSidebar() {
-  const list    = document.getElementById('tag-sidebar-list');
+  const list     = document.getElementById('tag-sidebar-list');
   const clearBtn = document.getElementById('btn-clear-tags');
   try {
     const tags = await api.getUniqueTags();
@@ -41,27 +45,43 @@ async function buildTagSidebar() {
       list.innerHTML = '<span class="tag-sidebar-empty">No tags yet.</span>';
       return;
     }
-    list.innerHTML = tags.map(tag =>
-      `<button class="tag-chip${activeTags.has(tag) ? ' active' : ''}" data-tag="${escHtml(tag)}">${escHtml(tag)}</button>`
-    ).join('');
+    list.innerHTML = tags.map(({ tag }) => {
+      const state  = activeTagFilter.get(tag) || '';
+      const symbol = TAG_SYMBOL[state] || '';
+      return `<button class="tag-chip${state ? ' ' + state : ''}" data-tag="${escHtml(tag)}">
+        ${symbol ? `<span class="tag-chip-state">${symbol}</span>` : ''}
+        <span class="tag-chip-label">${escHtml(tag)}</span>
+        ${state ? `<span class="tag-chip-clear" title="Remove">✕</span>` : ''}
+      </button>`;
+    }).join('');
     list.querySelectorAll('.tag-chip').forEach(chip => {
       chip.addEventListener('click', () => {
-        const tag = chip.dataset.tag;
-        if (activeTags.has(tag)) { activeTags.delete(tag); chip.classList.remove('active'); }
-        else                     { activeTags.add(tag);    chip.classList.add('active'); }
-        clearBtn.classList.toggle('hidden', activeTags.size === 0);
+        const tag  = chip.dataset.tag;
+        const curr = activeTagFilter.get(tag) || '';
+        const next = curr === '' ? 'include' : TAG_CYCLE[curr];
+        if (next) activeTagFilter.set(tag, next);
+        else activeTagFilter.delete(tag);
+        buildTagSidebar();
+        clearBtn.classList.toggle('hidden', activeTagFilter.size === 0);
+        runSearch();
+      });
+      chip.querySelector('.tag-chip-clear')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        activeTagFilter.delete(chip.dataset.tag);
+        buildTagSidebar();
+        clearBtn.classList.toggle('hidden', activeTagFilter.size === 0);
         runSearch();
       });
     });
-    clearBtn.classList.toggle('hidden', activeTags.size === 0);
+    clearBtn.classList.toggle('hidden', activeTagFilter.size === 0);
   } catch {
     list.innerHTML = '<span class="tag-sidebar-empty">Failed to load.</span>';
   }
 }
 
 document.getElementById('btn-clear-tags').addEventListener('click', () => {
-  activeTags.clear();
-  document.querySelectorAll('#tag-sidebar-list .tag-chip').forEach(c => c.classList.remove('active'));
+  activeTagFilter.clear();
+  buildTagSidebar();
   document.getElementById('btn-clear-tags').classList.add('hidden');
   runSearch();
 });
@@ -75,18 +95,31 @@ function parseSearchQuery(raw) {
 }
 
 // ── Search ──
+function _buildFilter() {
+  const include = [], exclude = [], require = [];
+  for (const [tag, state] of activeTagFilter) {
+    if (state === 'include') include.push(tag);
+    else if (state === 'exclude') exclude.push(tag);
+    else if (state === 'require') require.push(tag);
+  }
+  return { include, exclude, require };
+}
+
 async function runSearch() {
   const { q, tag: barTag } = parseSearchQuery(searchInput.value.trim());
-  // Combine sidebar tags + #tag from bar (AND logic)
-  const allTags = [...activeTags, ...(barTag ? [barTag] : [])];
+  const filter = _buildFilter();
+  if (barTag && !filter.include.includes(barTag) && !filter.exclude.includes(barTag) && !filter.require.includes(barTag)) {
+    filter.include = [...filter.include, barTag];
+  }
+  const hasFilter = filter.include.length > 0 || filter.exclude.length > 0 || filter.require.length > 0;
 
-  if (!q && allTags.length === 0) {
+  if (!q && !hasFilter) {
     stateInit.classList.remove('hidden');
     resultsEl.classList.add('hidden');
     stateLoad.classList.add('hidden');
     totalCount.textContent = '';
     updateCounts({ images: [], categories: [] });
-    updateURL(q, allTags);
+    updateURL(q, filter);
     return;
   }
 
@@ -95,7 +128,7 @@ async function runSearch() {
   resultsEl.classList.add('hidden');
 
   try {
-    const results = await api.search(q, 'all', allTags);
+    const results = await api.search(q, 'all', filter);
     lastResults = results;
     stateLoad.classList.add('hidden');
     resultsEl.classList.remove('hidden');
@@ -103,18 +136,19 @@ async function runSearch() {
     renderAll(results);
     const total = results.images.length + results.categories.length;
     totalCount.textContent = total > 0 ? `${total} result${total !== 1 ? 's' : ''}` : 'No results';
-    updateURL(q, allTags);
+    updateURL(q, filter);
   } catch (err) {
     stateLoad.classList.add('hidden');
     showToast('Search failed: ' + err.message, 'error');
   }
 }
 
-function updateURL(q, tags) {
+function updateURL(q, filter) {
   const p = new URLSearchParams();
   if (q) p.set('q', q);
-  if (tags.length === 1) p.set('tag', tags[0]);
-  else if (tags.length > 1) p.set('tags', tags.join(','));
+  if (filter.include.length > 0) p.set('include', filter.include.join(','));
+  if (filter.exclude.length > 0) p.set('exclude', filter.exclude.join(','));
+  if (filter.require.length > 0) p.set('require', filter.require.join(','));
   history.replaceState(null, '', p.toString() ? `?${p}` : location.pathname);
   document.title = q ? `"${q}" — Search — img-view` : 'Search — img-view';
 }
@@ -257,5 +291,5 @@ document.addEventListener('keydown', e => {
 
 // ── Init ──
 buildTagSidebar().then(() => {
-  if (initQuery || activeTags.size > 0) runSearch();
+  if (initQuery || activeTagFilter.size > 0) runSearch();
 });

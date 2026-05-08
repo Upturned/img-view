@@ -9,15 +9,21 @@ const catsGrid       = document.getElementById('categories-grid');
 const catsEmpty      = document.getElementById('categories-empty');
 const catsTitle      = document.getElementById('categories-title');
 const btnFavorites   = document.getElementById('btn-favorites');
+const btnShowAll     = document.getElementById('btn-show-all');
 
-let activeTags    = [];           // managed by tagSidebar
-let favoritesMode = false;
-let favoritesData = {};           // { "category/filename": true }
+let activeTagFilter = { include: [], exclude: [], require: [] };
+let favoritesMode   = false;
+let showAllMode     = false;
+let favoritesData   = {};           // { "category/filename": true }
 
 const tagSidebar = createTagSidebar({
   type: 'image',
-  onFilterChange: (tags) => { activeTags = tags; onTagsChanged(); },
+  onFilterChange: (filter) => { activeTagFilter = filter; onTagsChanged(); },
 });
+
+function hasActiveFilter(f) {
+  return f.include.length > 0 || f.exclude.length > 0 || f.require.length > 0;
+}
 
 // --- Theme toggle ---
 document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
@@ -42,6 +48,7 @@ btnFavorites.addEventListener('click', () => {
 });
 
 function enterFavoritesMode() {
+  if (showAllMode) _deactivateShowAll();
   favoritesMode = true;
   btnFavorites.classList.add('btn-primary');
   btnFavorites.classList.remove('btn-ghost');
@@ -56,6 +63,74 @@ function exitFavoritesMode() {
   btnFavorites.classList.remove('btn-primary');
   btnFavorites.classList.add('btn-ghost');
   showCategories();
+}
+
+// --- Show All ---
+btnShowAll.addEventListener('click', () => {
+  if (showAllMode) exitShowAllMode();
+  else enterShowAllMode();
+});
+
+function _deactivateShowAll() {
+  showAllMode = false;
+  btnShowAll.classList.remove('btn-primary');
+  btnShowAll.classList.add('btn-ghost');
+  document.getElementById('search-categories-block').classList.remove('hidden');
+}
+
+function enterShowAllMode() {
+  if (favoritesMode) {
+    favoritesMode = false;
+    btnFavorites.classList.remove('btn-primary');
+    btnFavorites.classList.add('btn-ghost');
+  }
+  showAllMode = true;
+  btnShowAll.classList.add('btn-primary');
+  btnShowAll.classList.remove('btn-ghost');
+  runShowAll(searchInput.value.trim());
+}
+
+function exitShowAllMode() {
+  _deactivateShowAll();
+  if (!hasActiveFilter(activeTagFilter) && !searchInput.value.trim()) {
+    showCategories();
+  } else {
+    runSearch(searchInput.value.trim());
+  }
+}
+
+async function runShowAll(raw = '') {
+  const { q, tag: barTag } = parseSearchQuery(raw);
+  const filter = { ...activeTagFilter };
+  if (barTag && !filter.include.includes(barTag) && !filter.exclude.includes(barTag) && !filter.require.includes(barTag)) {
+    filter.include = [...filter.include, barTag];
+  }
+  try {
+    const results = await api.search(q, 'images', filter);
+    sectionCats.classList.add('hidden');
+    sectionSearch.classList.remove('hidden');
+    sectionFavs.classList.add('hidden');
+    document.getElementById('search-categories-block').classList.add('hidden');
+
+    const imgGrid  = document.getElementById('search-images-grid');
+    const imgEmpty = document.getElementById('search-images-empty');
+    if (results.images.length === 0) {
+      imgGrid.innerHTML = '';
+      imgEmpty.classList.remove('hidden');
+    } else {
+      imgEmpty.classList.add('hidden');
+      imgGrid.innerHTML = results.images.map(img => imageSearchCard(img, !!favoritesData[`${img.category}/${img.filename}`])).join('');
+      imgGrid.querySelectorAll('.card').forEach((card, i) => {
+        card.addEventListener('click', () => {
+          sessionStorage.setItem('imageList', JSON.stringify(results.images));
+          sessionStorage.setItem('imageListMeta', JSON.stringify({}));
+          goTo('image', { category: results.images[i].category, filename: results.images[i].filename, index: i });
+        });
+      });
+    }
+  } catch {
+    showToast('Failed to load images.', 'error');
+  }
 }
 
 async function showFavoritesSection() {
@@ -97,10 +172,8 @@ async function showFavoritesSection() {
 
 function onTagsChanged() {
   const raw = searchInput.value.trim();
-  if (raw.length === 0 && activeTags.length === 0) {
-    showCategories();
-    return;
-  }
+  if (showAllMode) { runShowAll(raw); return; }
+  if (raw.length === 0 && !hasActiveFilter(activeTagFilter)) { showCategories(); return; }
   runSearch(raw);
 }
 
@@ -168,12 +241,16 @@ function parseSearchQuery(raw) {
 searchInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     const { q, tag: barTag } = parseSearchQuery(searchInput.value.trim());
-    const allTags = [...activeTags, ...(barTag ? [barTag] : [])];
-    if (q || allTags.length > 0) {
+    const filter = { ...activeTagFilter };
+    if (barTag && !filter.include.includes(barTag) && !filter.exclude.includes(barTag) && !filter.require.includes(barTag)) {
+      filter.include = [...filter.include, barTag];
+    }
+    if (q || hasActiveFilter(filter)) {
       const params = {};
       if (q) params.q = q;
-      if (allTags.length === 1) params.tag = allTags[0];
-      else if (allTags.length > 1) params.tags = allTags.join(',');
+      if (filter.include.length > 0) params.include = filter.include.join(',');
+      if (filter.exclude.length > 0) params.exclude = filter.exclude.join(',');
+      if (filter.require.length > 0) params.require = filter.require.join(',');
       goTo('search', params);
     }
   }
@@ -186,7 +263,11 @@ searchInput.addEventListener('input', () => {
   if (favoritesMode) exitFavoritesMode();
 
   clearTimeout(searchDebounce);
-  if (raw.length === 0 && activeTags.length === 0) {
+  if (showAllMode) {
+    searchDebounce = setTimeout(() => runShowAll(raw), 250);
+    return;
+  }
+  if (raw.length === 0 && !hasActiveFilter(activeTagFilter)) {
     showCategories();
     return;
   }
@@ -196,7 +277,8 @@ searchInput.addEventListener('input', () => {
 searchClear.addEventListener('click', () => {
   searchInput.value = '';
   searchClear.classList.add('hidden');
-  if (activeTags.length === 0) showCategories();
+  if (showAllMode) runShowAll('');
+  else if (!hasActiveFilter(activeTagFilter)) showCategories();
   else runSearch('');
   searchInput.focus();
 });
@@ -205,16 +287,21 @@ function showCategories() {
   sectionCats.classList.remove('hidden');
   sectionSearch.classList.add('hidden');
   sectionFavs.classList.add('hidden');
+  document.getElementById('search-categories-block').classList.remove('hidden');
 }
 
 async function runSearch(raw) {
   const { q, tag: barTag } = parseSearchQuery(raw);
-  const allTagsList = [...activeTags, ...(barTag ? [barTag] : [])];
+  const filter = { ...activeTagFilter };
+  if (barTag && !filter.include.includes(barTag) && !filter.exclude.includes(barTag) && !filter.require.includes(barTag)) {
+    filter.include = [...filter.include, barTag];
+  }
   try {
-    const results = await api.search(q, 'all', allTagsList);
+    const results = await api.search(q, 'all', filter);
     sectionCats.classList.add('hidden');
     sectionSearch.classList.remove('hidden');
     sectionFavs.classList.add('hidden');
+    document.getElementById('search-categories-block').classList.remove('hidden');
 
     const catGrid  = document.getElementById('search-categories-grid');
     const catEmpty = document.getElementById('search-categories-empty');

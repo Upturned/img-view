@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>img-view</title>
+
+  <script>
+    const _t = localStorage.getItem('theme') || 'modern';
+    document.write('<link id="theme-link" rel="stylesheet" href="/css/theme-' + _t + '.css">');
+  </script>
+  <link rel="stylesheet" href="/css/base.css" />
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <span class="navbar-logo">img<span>·</span>view</span>
+      <div class="navbar-actions">
+        <button class="btn btn-ghost" id="btn-nav-organize">Organize</button>
+        <button class="btn-icon theme-toggle" id="theme-toggle-btn" title="Switch theme"></button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container page">
+
+    <div class="hub-grid">
+
+      <a class="hub-card" href="/pages/home.html">
+        <div class="hub-card-icon">🖼</div>
+        <div class="hub-card-title">Images</div>
+        <div class="hub-card-desc">Browse categories, search, and manage your photo collection</div>
+      </a>
+
+      <a class="hub-card" href="/pages/videos.html">
+        <div class="hub-card-icon">🎬</div>
+        <div class="hub-card-title">Videos</div>
+        <div class="hub-card-desc">Browse and watch your video library by category</div>
+      </a>
+
+      <a class="hub-card" href="/pages/audio.html">
+        <div class="hub-card-icon">🎵</div>
+        <div class="hub-card-title">Audio</div>
+        <div class="hub-card-desc">Browse and listen to your music collection by category</div>
+      </a>
+
+      <div class="hub-card disabled" aria-disabled="true">
+        <div class="hub-card-icon">📝</div>
+        <div class="hub-card-title">Text-Writer</div>
+        <div class="hub-card-desc">Read and write stories with embedded images</div>
+        <div class="hub-card-badge">Coming soon</div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/js/theme.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/navbar.js"></script>
+  <script>
+    document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
+  </script>
+
+</body>
+</html>

@@ -5,20 +5,24 @@ const { execSync } = require("child_process");
 const router = express.Router();
 const scanner = require("../utils/scanner");
 const { thumbPath, cleanStaleThumbs, generateCategoryThumbs } = require("../utils/thumbnails");
+const { db } = require("../utils/db");
 
 // ── File picker via PowerShell native dialog ──
 // Opens a Windows OpenFileDialog and returns the chosen path, or null if cancelled.
 function openFilePicker(type) {
   const imageExts = "*.jpg;*.jpeg;*.png;*.gif;*.webp;*.svg;*.avif";
   const videoExts = "*.mp4;*.webm";
+  const audioExts = "*.mp3;*.flac;*.ogg;*.wav;*.m4a;*.aac;*.opus";
 
   const filter =
-    type === "video"
-      ? `Video files|${videoExts}|All files|*.*`
-      : `Image files|${imageExts}|All files|*.*`;
+    type === "video" ? `Video files|${videoExts}|All files|*.*` :
+    type === "audio" ? `Audio files|${audioExts}|All files|*.*` :
+                      `Image files|${imageExts}|All files|*.*`;
 
   const title =
-    type === "video" ? "Select a video file" : "Select an image file";
+    type === "video" ? "Select a video file" :
+    type === "audio" ? "Select an audio file" :
+                      "Select an image file";
 
   // TopMost form keeps the dialog in front of the browser window
   const script = [
@@ -54,7 +58,9 @@ function safeResolve(baseDir, category, filename) {
 }
 
 function baseDir(type) {
-  return type === "video" ? scanner.getVideosDir() : scanner.getImagesDir();
+  if (type === "video") return scanner.getVideosDir();
+  if (type === "audio") return scanner.getAudioDir();
+  return scanner.getImagesDir();
 }
 
 // POST /api/files/move
@@ -99,6 +105,14 @@ router.post("/move", (req, res) => {
         try { fs.renameSync(oldThumb, newThumb); } catch { /* non-critical */ }
       }
     }
+
+    // Update DB path so tags and favorites follow the move
+    try {
+      db.prepare(`
+        UPDATE files SET category = ?, path = ?
+        WHERE type = ? AND category = ? AND filename = ?
+      `).run(toCategory, `${toCategory}/${filename}`, type, fromCategory, filename);
+    } catch { /* non-critical */ }
 
     res.json({ message: "File moved.", to: `${toCategory}/${filename}` });
   } catch (err) {
@@ -232,7 +246,7 @@ router.get("/loose", (req, res) => {
   try {
     const loose = scanner.scanLooseFiles();
     const total =
-      loose.images.length + loose.videos.length + loose.others.length;
+      loose.images.length + loose.videos.length + loose.audios.length + loose.others.length;
     res.json({ total, ...loose });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -277,6 +291,13 @@ router.post("/move-bulk", (req, res) => {
           try { fs.renameSync(oldThumb, newThumb); } catch { /* non-critical */ }
         }
       }
+
+      try {
+        db.prepare(`
+          UPDATE files SET category = ?, path = ?
+          WHERE type = ? AND category = ? AND filename = ?
+        `).run(toCategory, `${toCategory}/${filename}`, type, fromCategory, filename);
+      } catch { /* non-critical */ }
     } catch (err) {
       errors.push({ filename, error: err.message });
     }
@@ -375,20 +396,13 @@ router.post("/rename", (req, res) => {
     }
   }
 
-  // Update tags.json — the key is "category/filename", so it changes
-  const tagsPath = path.join(__dirname, "../../data/tags.json");
+  // Update DB path so tags and favorites follow the rename
   try {
-    const tags = JSON.parse(fs.readFileSync(tagsPath, "utf8"));
-    const oldKey = `${category}/${oldFilename}`;
-    const newKey = `${category}/${safeName}`;
-    if (tags[oldKey]) {
-      tags[newKey] = tags[oldKey];
-      delete tags[oldKey];
-      fs.writeFileSync(tagsPath, JSON.stringify(tags, null, 2), "utf8");
-    }
-  } catch {
-    /* tags are non-critical, keep going */
-  }
+    db.prepare(`
+      UPDATE files SET filename = ?, path = ?, extension = ?
+      WHERE type = ? AND category = ? AND filename = ?
+    `).run(safeName, `${category}/${safeName}`, path.extname(safeName).toLowerCase(), type, category, oldFilename);
+  } catch { /* non-critical */ }
 
   res.json({ filename: safeName, category });
 });

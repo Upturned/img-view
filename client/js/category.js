@@ -9,8 +9,11 @@ let allTagsData  = {};   // full tags.json { "cat/file": [...tags] }
 let favoritesData = {};  // { "cat/file": true }
 let displayList  = [];   // after client-side filters
 let sortOrder    = 'asc';
-let activeTags   = new Set();
-let nameFilter   = '';
+let activeTagFilter = new Map();  // tag → 'include' | 'exclude' | 'require'
+let nameFilter      = '';
+
+const TAG_CYCLE  = { 'include': 'exclude', 'exclude': 'require', 'require': '' };
+const TAG_SYMBOL = { 'include': '+', 'exclude': '−', 'require': '✓' };
 let favoritesOnly = false;
 let tagSortMode  = 'name';   // 'name' | 'count'
 let tagSearchQuery = '';
@@ -105,24 +108,38 @@ function buildTagSidebar() {
     return;
   }
 
-  list.innerHTML = items.map(({ tag, count }) =>
-    `<button class="tag-chip${activeTags.has(tag) ? ' active' : ''}" data-tag="${escHtml(tag)}">
+  list.innerHTML = items.map(({ tag, count }) => {
+    const state  = activeTagFilter.get(tag) || '';
+    const symbol = TAG_SYMBOL[state] || '';
+    return `<button class="tag-chip${state ? ' ' + state : ''}" data-tag="${escHtml(tag)}">
+      ${symbol ? `<span class="tag-chip-state">${symbol}</span>` : ''}
       <span class="tag-chip-label">${escHtml(tag)}</span>
       <span class="tag-count">${count}</span>
-    </button>`
-  ).join('');
+      ${state ? `<span class="tag-chip-clear" title="Remove">✕</span>` : ''}
+    </button>`;
+  }).join('');
 
   list.querySelectorAll('.tag-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      const tag = chip.dataset.tag;
-      if (activeTags.has(tag)) { activeTags.delete(tag); chip.classList.remove('active'); }
-      else                     { activeTags.add(tag);    chip.classList.add('active'); }
-      clearBtn.classList.toggle('hidden', activeTags.size === 0);
+      const tag  = chip.dataset.tag;
+      const curr = activeTagFilter.get(tag) || '';
+      const next = curr === '' ? 'include' : TAG_CYCLE[curr];
+      if (next) activeTagFilter.set(tag, next);
+      else activeTagFilter.delete(tag);
+      clearBtn.classList.toggle('hidden', activeTagFilter.size === 0);
+      buildTagSidebar();
+      applyFilters();
+    });
+    chip.querySelector('.tag-chip-clear')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      activeTagFilter.delete(chip.dataset.tag);
+      clearBtn.classList.toggle('hidden', activeTagFilter.size === 0);
+      buildTagSidebar();
       applyFilters();
     });
   });
 
-  clearBtn.classList.toggle('hidden', activeTags.size === 0);
+  clearBtn.classList.toggle('hidden', activeTagFilter.size === 0);
 }
 
 // Tag sidebar: search input
@@ -150,11 +167,19 @@ document.getElementById('tag-sort-count').addEventListener('click', () => {
 function applyFilters() {
   let list = allImages;
 
-  if (activeTags.size > 0) {
+  if (activeTagFilter.size > 0) {
+    const include = [], exclude = [], req = [];
+    for (const [tag, state] of activeTagFilter) {
+      if (state === 'include') include.push(tag);
+      else if (state === 'exclude') exclude.push(tag);
+      else if (state === 'require') req.push(tag);
+    }
     list = list.filter(img => {
-      const key = `${img.category}/${img.filename}`;
-      const imgTags = allTagsData[key] || [];
-      return [...activeTags].every(t => imgTags.includes(t));
+      const imgTags = allTagsData[`${img.category}/${img.filename}`] || [];
+      if (req.length > 0     && !req.every(t => imgTags.includes(t)))  return false;
+      if (include.length > 0 && !include.some(t => imgTags.includes(t))) return false;
+      if (exclude.length > 0 &&  exclude.some(t => imgTags.includes(t))) return false;
+      return true;
     });
   }
 
@@ -301,9 +326,9 @@ function openImage(index) {
 
 // --- Tag sidebar: clear button ---
 document.getElementById('btn-clear-tags').addEventListener('click', () => {
-  activeTags.clear();
-  document.querySelectorAll('#tag-sidebar-list .tag-chip').forEach(c => c.classList.remove('active'));
+  activeTagFilter.clear();
   document.getElementById('btn-clear-tags').classList.add('hidden');
+  buildTagSidebar();
   applyFilters();
 });
 

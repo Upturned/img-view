@@ -1,17 +1,34 @@
 // Reusable tag sidebar component.
 // Requires sidebar HTML to be present in the page (same structure as in home.html).
 // Usage:
-//   const sidebar = createTagSidebar({ type: 'image', onFilterChange: (activeTags) => {} });
+//   const sidebar = createTagSidebar({ type: 'image', onFilterChange: (filter) => {} });
 //   sidebar.init();
+// filter shape: { include: string[], exclude: string[], require: string[] }
+//   include = any of these tags (OR)
+//   exclude = none of these tags
+//   require = all of these tags (AND)
 
 function createTagSidebar({ type = 'image', onFilterChange }) {
   let allTagsData = [];
-  let activeTags  = new Set();
+  let tagStates   = new Map();  // tag → 'include' | 'exclude' | 'require'
   let sortMode    = 'name';
   let searchQuery = '';
 
+  const CYCLE  = { 'include': 'exclude', 'exclude': 'require', 'require': '' };
+  const SYMBOL = { 'include': '+', 'exclude': '−', 'require': '✓' };
+
   function _esc(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function _buildFilter() {
+    const include = [], exclude = [], require = [];
+    for (const [tag, state] of tagStates) {
+      if (state === 'include') include.push(tag);
+      else if (state === 'exclude') exclude.push(tag);
+      else if (state === 'require') require.push(tag);
+    }
+    return { include, exclude, require };
   }
 
   async function reload() {
@@ -43,32 +60,45 @@ function createTagSidebar({ type = 'image', onFilterChange }) {
       return;
     }
 
-    list.innerHTML = items.map(({ tag, count }) =>
-      `<button class="tag-chip${activeTags.has(tag) ? ' active' : ''}" data-tag="${_esc(tag)}">
+    list.innerHTML = items.map(({ tag, count }) => {
+      const state  = tagStates.get(tag) || '';
+      const symbol = SYMBOL[state] || '';
+      return `<button class="tag-chip${state ? ' ' + state : ''}" data-tag="${_esc(tag)}">
+        ${symbol ? `<span class="tag-chip-state">${symbol}</span>` : ''}
         <span class="tag-chip-label">${_esc(tag)}</span>
         <span class="tag-count">${count}</span>
-      </button>`
-    ).join('');
+        ${state ? `<span class="tag-chip-clear" title="Remove">✕</span>` : ''}
+      </button>`;
+    }).join('');
 
     list.querySelectorAll('.tag-chip').forEach(chip => {
       chip.addEventListener('click', () => {
-        const tag = chip.dataset.tag;
-        if (activeTags.has(tag)) activeTags.delete(tag);
-        else activeTags.add(tag);
-        chip.classList.toggle('active', activeTags.has(tag));
-        clearBtn?.classList.toggle('hidden', activeTags.size === 0);
-        onFilterChange([...activeTags]);
+        const tag  = chip.dataset.tag;
+        const curr = tagStates.get(tag) || '';
+        const next = curr === '' ? 'include' : CYCLE[curr];
+        if (next) tagStates.set(tag, next);
+        else tagStates.delete(tag);
+        render();
+        clearBtn?.classList.toggle('hidden', tagStates.size === 0);
+        onFilterChange(_buildFilter());
+      });
+      chip.querySelector('.tag-chip-clear')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tagStates.delete(chip.dataset.tag);
+        render();
+        clearBtn?.classList.toggle('hidden', tagStates.size === 0);
+        onFilterChange(_buildFilter());
       });
     });
 
-    clearBtn?.classList.toggle('hidden', activeTags.size === 0);
+    clearBtn?.classList.toggle('hidden', tagStates.size === 0);
   }
 
   function clear() {
-    activeTags.clear();
-    document.querySelectorAll('#tag-sidebar-list .tag-chip').forEach(chip => chip.classList.remove('active'));
+    tagStates.clear();
+    render();
     document.getElementById('btn-clear-tags')?.classList.add('hidden');
-    onFilterChange([]);
+    onFilterChange({ include: [], exclude: [], require: [] });
   }
 
   function init() {
@@ -92,5 +122,5 @@ function createTagSidebar({ type = 'image', onFilterChange }) {
     reload();
   }
 
-  return { init, clear, reload, getActiveTags: () => [...activeTags] };
+  return { init, clear, reload, getFilter: _buildFilter };
 }
